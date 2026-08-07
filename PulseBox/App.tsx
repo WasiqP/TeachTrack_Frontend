@@ -17,16 +17,19 @@ import { FormsProvider } from './src/context/FormsContext';
 import { ClassesProvider } from './src/context/ClassesContext';
 import { GradesTasksProvider } from './src/context/GradesTasksContext';
 import { UserProvider } from './src/context/UserContext';
+import { AuthProvider } from './src/context/AuthContext';
 import { AppSettingsProvider } from './src/context/AppSettingsContext';
 import { AlertModalProvider } from './src/context/AlertModalContext';
 import { ThemeProvider, useThemeMode } from './src/theme';
 
 // Import screens
 import SplashScreen from './src/onboarding/SplashScreen';
+import BootRedirect from './src/onboarding/BootRedirect';
 import GetStarted from './src/onboarding/GetStarted';
 import Onboarding01 from './src/onboarding/Onboarding01';
 import Onboarding02 from './src/onboarding/Onboarding02';
 import Onboarding03 from './src/onboarding/Onboarding03';
+import TeacherProfileSetup from './src/onboarding/TeacherProfileSetup';
 import Login from './src/authentication/Login';
 import SignUp from './src/authentication/SignUp';
 import ForgotPassword from './src/authentication/ForgotPassword';
@@ -115,12 +118,13 @@ function AppNavigation() {
           }}
         >
           <Stack.Navigator
-            initialRouteName="GetStarted"
+            initialRouteName="BootRedirect"
             screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: ink.canvas },
             }}
           >
+            <Stack.Screen name="BootRedirect" component={BootRedirect} options={instantAuthScreenOptions} />
             <Stack.Screen name="GetStarted" component={GetStarted} options={instantAuthScreenOptions} />
             <Stack.Screen name="Onboarding01" component={Onboarding01} options={instantAuthScreenOptions} />
             <Stack.Screen name="Onboarding02" component={Onboarding02} options={instantAuthScreenOptions} />
@@ -129,6 +133,7 @@ function AppNavigation() {
             <Stack.Screen name="SignUp" component={SignUp} options={instantAuthScreenOptions} />
             <Stack.Screen name="ForgotPassword" component={ForgotPassword} options={instantAuthScreenOptions} />
             <Stack.Screen name="VerifyOtp" component={VerifyOtp} options={instantAuthScreenOptions} />
+            <Stack.Screen name="TeacherProfileSetup" component={TeacherProfileSetup} options={instantAuthScreenOptions} />
             <Stack.Screen name="Home" component={TeacherTabShell} />
             <Stack.Screen name="MyForms" component={MyForms} />
             <Stack.Screen name="LessonPlanner" component={LessonPlanner} />
@@ -179,6 +184,7 @@ function App() {
       <ThemeProvider>
         <AlertModalProvider>
           <UserProvider>
+            <AuthProvider>
             <AppSettingsProvider>
             <FormsProvider>
               <ClassesProvider>
@@ -194,6 +200,7 @@ function App() {
               </ClassesProvider>
             </FormsProvider>
             </AppSettingsProvider>
+            </AuthProvider>
           </UserProvider>
         </AlertModalProvider>
       </ThemeProvider>

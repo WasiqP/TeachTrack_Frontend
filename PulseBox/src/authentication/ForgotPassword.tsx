@@ -8,6 +8,7 @@ import {
   Image,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
@@ -16,6 +17,9 @@ import BackButton from '../components/Reusable-Components/BackButton';
 import { PulseScrollView } from '../components/PulseScrollView';
 import ScreenFrame from '../components/layout/ScreenFrame';
 import { scaleFont, useResponsive } from '../ui/responsive';
+import { useAuth } from '../context/AuthContext';
+import { usePulseAlert } from '../context/AlertModalContext';
+import { authErrorAlert } from '../api/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ForgotPassword'>;
 
@@ -24,6 +28,9 @@ const ForgotPassword: React.FC<Props> = ({ navigation, route }) => {
   const r = useResponsive();
   const initialEmail = route.params?.email ?? '';
   const [email, setEmail] = useState(initialEmail);
+  const [busy, setBusy] = useState(false);
+  const { forgotPassword } = useAuth();
+  const { showAlert } = usePulseAlert();
 
   const styles = useMemo(
     () =>
@@ -134,13 +141,22 @@ const ForgotPassword: React.FC<Props> = ({ navigation, route }) => {
     else navigation.navigate('Login');
   };
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     const trimmed = email.trim();
     if (!trimmed) return;
-    navigation.navigate('VerifyOtp', {
-      email: trimmed,
-      purpose: 'reset',
-    });
+    setBusy(true);
+    try {
+      await forgotPassword(trimmed);
+      navigation.navigate('VerifyOtp', {
+        email: trimmed,
+        purpose: 'reset',
+      });
+    } catch (err) {
+      const a = authErrorAlert(err);
+      showAlert({ variant: 'error', title: a.title, message: a.message });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -186,12 +202,16 @@ const ForgotPassword: React.FC<Props> = ({ navigation, route }) => {
             />
 
             <Pressable
-              style={[styles.primaryBtn, !email.trim() && styles.primaryBtnDisabled]}
+              style={[styles.primaryBtn, (!email.trim() || busy) && styles.primaryBtnDisabled]}
               android_ripple={{ color: theme.rippleLight }}
-              disabled={!email.trim()}
+              disabled={!email.trim() || busy}
               onPress={handleSendCode}
             >
-              <Text style={styles.primaryLabel}>Send verification code</Text>
+              {busy ? (
+                <ActivityIndicator color={theme.white} />
+              ) : (
+                <Text style={styles.primaryLabel}>Send verification code</Text>
+              )}
             </Pressable>
 
             <Pressable

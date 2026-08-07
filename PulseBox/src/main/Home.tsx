@@ -25,7 +25,6 @@ import {
   useClasses,
   type ClassActivityItem,
   type ClassActivityKind,
-  type ClassAnnouncement,
 } from '../context/ClassesContext';
 import { useForms } from '../context/FormsContext';
 import { useUser } from '../context/UserContext';
@@ -355,7 +354,7 @@ type QuickItem = {
 };
 
 const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => {
-  const { classes, updateClass } = useClasses();
+  const { classes, postAnnouncement: postAnnouncementApi } = useClasses();
   const { forms } = useForms();
   const { tasks, grades } = useGradesTasks();
   const { firstName, displayName } = useUser();
@@ -526,33 +525,24 @@ const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => 
       });
       return;
     }
-    const createdAt = new Date().toISOString();
-    const next: ClassAnnouncement = {
-      id: `ann-${Date.now()}`,
-      body,
-      createdAt,
-    };
-    const merged = [next, ...(selectedClass.announcements ?? [])];
-    const activity: ClassActivityItem = {
-      id: `act-${Date.now()}`,
-      kind: 'announcement',
-      headline: 'Posted an announcement',
-      detail: body.length > 100 ? `${body.slice(0, 100)}…` : body,
-      createdAt,
-    };
-    void updateClass(selectedClass.id, {
-      announcements: merged,
-      activityLog: [activity, ...(selectedClass.activityLog ?? [])].slice(0, 40),
-    }).then(() => {
-      setAnnouncementDraft('');
-      setAnnouncementModalOpen(false);
-      showSuccess('Posted', `Announcement added for ${selectedClass.name}.`);
-    });
+    void postAnnouncementApi(selectedClass.id, body)
+      .then(() => {
+        setAnnouncementDraft('');
+        setAnnouncementModalOpen(false);
+        showSuccess('Posted', `Announcement added for ${selectedClass.name}.`);
+      })
+      .catch((e) => {
+        showAlert({
+          variant: 'warning',
+          title: 'Could not post',
+          message: e instanceof Error ? e.message : 'Try again.',
+        });
+      });
   }, [
     announcementDraft,
     selectedClass,
     selectedClassId,
-    updateClass,
+    postAnnouncementApi,
     showAlert,
     showSuccess,
   ]);

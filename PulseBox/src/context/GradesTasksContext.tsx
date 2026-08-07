@@ -4,14 +4,13 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from './AuthContext';
+import * as gradesApi from '../api/grades';
+import type { GradeOut, TaskKind, TaskOut } from '../api/grades';
 
-const STORAGE_KEY = 'groove_grades_tasks_v1';
-
-export type TaskKind = 'quiz' | 'assignment' | 'project' | 'test';
+export type { TaskKind };
 
 export interface ClassTask {
   id: string;
@@ -37,73 +36,6 @@ export interface TaskGradeRecord {
   status: 'graded' | 'pending' | 'missing';
 }
 
-type Store = {
-  tasks: ClassTask[];
-  grades: TaskGradeRecord[];
-};
-
-const SEED: Store = {
-  tasks: [
-    {
-      id: 'task-m1-mid',
-      classId: '1',
-      title: 'Midterm quiz',
-      kind: 'quiz',
-      dueLabel: 'Oct 15',
-      createdAt: '2024-10-01T12:00:00.000Z',
-    },
-    {
-      id: 'task-m1-ps',
-      classId: '1',
-      title: 'Problem set 3',
-      kind: 'assignment',
-      dueLabel: 'Oct 18',
-      createdAt: '2024-10-03T09:30:00.000Z',
-    },
-    {
-      id: 'task-m1-lab',
-      classId: '1',
-      title: 'Lab report — motion',
-      kind: 'project',
-      dueLabel: 'Oct 22',
-      createdAt: '2024-10-05T16:00:00.000Z',
-    },
-    {
-      id: 'task-e1-essay',
-      classId: '2',
-      title: 'Essay draft',
-      kind: 'assignment',
-      dueLabel: 'Oct 20',
-      createdAt: '2024-10-02T11:00:00.000Z',
-    },
-    {
-      id: 'task-e1-vocab',
-      classId: '2',
-      title: 'Vocabulary test',
-      kind: 'test',
-      dueLabel: 'Oct 12',
-      createdAt: '2024-09-28T14:00:00.000Z',
-    },
-  ],
-  grades: [
-    // Mathematics 101 — class 1, students s1–s3
-    { id: 'g1', classId: '1', taskId: 'task-m1-mid', studentId: 's1', grade: '92%', status: 'graded' },
-    { id: 'g2', classId: '1', taskId: 'task-m1-mid', studentId: 's2', grade: '88%', status: 'graded' },
-    { id: 'g3', classId: '1', taskId: 'task-m1-mid', studentId: 's3', grade: '76%', status: 'graded' },
-    { id: 'g4', classId: '1', taskId: 'task-m1-ps', studentId: 's1', grade: 'A−', status: 'graded' },
-    { id: 'g5', classId: '1', taskId: 'task-m1-ps', studentId: 's2', grade: 'B+', status: 'graded' },
-    { id: 'g6', classId: '1', taskId: 'task-m1-ps', studentId: 's3', grade: '—', status: 'missing' },
-    { id: 'g7', classId: '1', taskId: 'task-m1-lab', studentId: 's1', grade: '18/20', status: 'graded' },
-    { id: 'g8', classId: '1', taskId: 'task-m1-lab', studentId: 's2', grade: '17/20', status: 'graded' },
-    { id: 'g9', classId: '1', taskId: 'task-m1-lab', studentId: 's3', grade: 'Pending', status: 'pending' },
-    // English — class 2, students s4–s5
-    { id: 'g10', classId: '2', taskId: 'task-e1-essay', studentId: 's4', grade: 'B', status: 'graded' },
-    { id: 'g11', classId: '2', taskId: 'task-e1-essay', studentId: 's5', grade: 'A−', status: 'graded' },
-    { id: 'g12', classId: '2', taskId: 'task-e1-vocab', studentId: 's4', grade: '40/45', status: 'graded' },
-    { id: 'g13', classId: '2', taskId: 'task-e1-vocab', studentId: 's5', grade: '42/45', status: 'graded' },
-  ],
-};
-
 export type AssignFormToClassesPayload = {
   formId: string;
   title: string;
@@ -125,133 +57,143 @@ type GradesTasksContextValue = {
   assignFormToClasses: (payload: AssignFormToClassesPayload) => Promise<void>;
   /** Removes gradebook tasks and grades tied to a deleted form (Share task → classes). */
   removeTasksForForm: (formId: string) => Promise<void>;
+  /** PATCH one grade row on the server. */
+  updateGrade: (
+    gradeId: string,
+    patch: { grade?: string; status?: TaskGradeRecord['status'] },
+  ) => Promise<void>;
+  /** Ensure form has a share token; returns absolute share URL for QR/link. */
+  publishForm: (formId: string) => Promise<{ shareToken: string; shareUrl: string }>;
+  refreshGradebook: () => Promise<void>;
 };
 
 const GradesTasksContext = createContext<GradesTasksContextValue | undefined>(undefined);
 
+function asTaskKind(k: string): TaskKind {
+  if (k === 'quiz' || k === 'assignment' || k === 'project' || k === 'test') return k;
+  return 'quiz';
+}
+
+function mapTask(t: TaskOut): ClassTask {
+  return {
+    id: t.id,
+    classId: String(t.classId),
+    title: t.title,
+    kind: asTaskKind(String(t.kind)),
+    dueLabel: t.dueLabel ?? undefined,
+    dueAt: t.dueAt ?? undefined,
+    createdAt: t.createdAt,
+    formId: t.formId ? String(t.formId) : undefined,
+  };
+}
+
+function mapGrade(g: GradeOut): TaskGradeRecord {
+  return {
+    id: String(g.id),
+    classId: String(g.classId),
+    taskId: g.taskId,
+    studentId: String(g.studentId),
+    grade: g.grade,
+    status: g.status,
+  };
+}
+
 export const GradesTasksProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, isBootstrapping } = useAuth();
   const [tasks, setTasks] = useState<ClassTask[]>([]);
   const [grades, setGrades] = useState<TaskGradeRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const tasksRef = useRef(tasks);
-  const gradesRef = useRef(grades);
-  useEffect(() => {
-    tasksRef.current = tasks;
-  }, [tasks]);
-  useEffect(() => {
-    gradesRef.current = grades;
-  }, [grades]);
+
+  const refreshGradebook = useCallback(async () => {
+    if (!isAuthenticated) {
+      setTasks([]);
+      setGrades([]);
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const [tRes, gRes] = await Promise.all([
+        gradesApi.listTasks(1, 100),
+        gradesApi.listGrades(1, 500),
+      ]);
+      setTasks(tRes.data.map(mapTask));
+      setGrades(gRes.data.map(mapGrade));
+    } catch (e) {
+      console.warn('refreshGradebook failed', e);
+      setTasks([]);
+      setGrades([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(STORAGE_KEY);
-        if (cancelled) return;
-        if (raw) {
-          const parsed = JSON.parse(raw) as Store;
-          const loaded = (parsed.tasks ?? []).map((t) => ({
-            ...t,
-            createdAt: t.createdAt ?? new Date(0).toISOString(),
-          }));
-          setTasks(loaded);
-          setGrades(parsed.grades ?? []);
-        } else {
-          setTasks(SEED.tasks);
-          setGrades(SEED.grades);
-          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(SEED));
-        }
-      } catch (e) {
-        console.warn('GradesTasks load failed', e);
-        setTasks(SEED.tasks);
-        setGrades(SEED.grades);
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (isBootstrapping) return;
+    void refreshGradebook();
+  }, [isBootstrapping, isAuthenticated, refreshGradebook]);
 
   const getGrade = useCallback(
     (classId: string, taskId: string, studentId: string) =>
-      grades.find((g) => g.classId === classId && g.taskId === taskId && g.studentId === studentId),
+      grades.find(
+        (g) => g.classId === classId && g.taskId === taskId && g.studentId === studentId,
+      ),
     [grades],
   );
 
   const getTasksForClass = useCallback(
-    (classId: string) => tasks.filter((t) => t.classId === classId).sort((a, b) => a.title.localeCompare(b.title)),
+    (classId: string) =>
+      tasks.filter((t) => t.classId === classId).sort((a, b) => a.title.localeCompare(b.title)),
     [tasks],
   );
 
   const assignFormToClasses = useCallback(async (payload: AssignFormToClassesPayload) => {
-    const now = new Date().toISOString();
-    let nextTasks = [...tasksRef.current];
-    let nextGrades = [...gradesRef.current];
-
-    for (const target of payload.targets) {
-      const taskId = `form-${payload.formId}-cls-${target.classId}`;
-      const taskRow: ClassTask = {
-        id: taskId,
-        classId: target.classId,
-        title: payload.title,
-        kind: payload.kind,
-        dueLabel: payload.dueLabel,
-        dueAt: payload.dueAt,
-        createdAt: now,
-        formId: payload.formId,
-      };
-      const idx = nextTasks.findIndex((t) => t.id === taskId);
-      if (idx >= 0) {
-        nextTasks[idx] = taskRow;
-      } else {
-        nextTasks.push(taskRow);
-      }
-
-      for (const studentId of target.studentIds) {
-        const exists = nextGrades.some(
-          (g) =>
-            g.classId === target.classId && g.taskId === taskId && g.studentId === studentId,
-        );
-        if (!exists) {
-          nextGrades.push({
-            id: `g-${taskId}-${studentId}`,
-            classId: target.classId,
-            taskId,
-            studentId,
-            grade: '—',
-            status: 'pending',
-          });
-        }
-      }
-    }
-
-    setTasks(nextTasks);
-    setGrades(nextGrades);
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks: nextTasks, grades: nextGrades }));
-    } catch (e) {
-      console.warn('persist grades/tasks failed', e);
-    }
+    await gradesApi.assignForm(payload.formId, {
+      title: payload.title,
+      kind: payload.kind,
+      dueLabel: payload.dueLabel,
+      dueAt: payload.dueAt,
+      targets: payload.targets,
+    });
+    // Re-hydrate so grade ids match server UUIDs
+    const [tRes, gRes] = await Promise.all([
+      gradesApi.listTasks(1, 100),
+      gradesApi.listGrades(1, 500),
+    ]);
+    setTasks(tRes.data.map(mapTask));
+    setGrades(gRes.data.map(mapGrade));
   }, []);
 
   const removeTasksForForm = useCallback(async (formId: string) => {
-    const prevT = tasksRef.current;
-    const prevG = gradesRef.current;
-    const removedIds = new Set(prevT.filter((t) => t.formId === formId).map((t) => t.id));
-    if (removedIds.size === 0) {
-      return;
-    }
-    const nextTasks = prevT.filter((t) => t.formId !== formId);
-    const nextGrades = prevG.filter((g) => !removedIds.has(g.taskId));
-    setTasks(nextTasks);
-    setGrades(nextGrades);
+    await gradesApi.deleteFormAssignments(formId);
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks: nextTasks, grades: nextGrades }));
-    } catch (e) {
-      console.warn('persist grades/tasks after form delete failed', e);
+      const [tRes, gRes] = await Promise.all([
+        gradesApi.listTasks(1, 100),
+        gradesApi.listGrades(1, 500),
+      ]);
+      setTasks(tRes.data.map(mapTask));
+      setGrades(gRes.data.map(mapGrade));
+    } catch {
+      setTasks((prev) => prev.filter((t) => t.formId !== formId));
+      setGrades((prev) => prev.filter((g) => !g.taskId.includes(`form-${formId}-`)));
     }
+  }, []);
+
+  const updateGrade = useCallback(
+    async (
+      gradeId: string,
+      patch: { grade?: string; status?: TaskGradeRecord['status'] },
+    ) => {
+      const updated = await gradesApi.patchGrade(gradeId, patch);
+      const mapped = mapGrade(updated);
+      setGrades((prev) => prev.map((g) => (g.id === gradeId ? mapped : g)));
+    },
+    [],
+  );
+
+  const publishForm = useCallback(async (formId: string) => {
+    const res = await gradesApi.publishForm(formId);
+    return { shareToken: res.shareToken, shareUrl: res.shareUrl };
   }, []);
 
   const value = useMemo(
@@ -263,8 +205,22 @@ export const GradesTasksProvider: React.FC<{ children: React.ReactNode }> = ({ c
       getTasksForClass,
       assignFormToClasses,
       removeTasksForForm,
+      updateGrade,
+      publishForm,
+      refreshGradebook,
     }),
-    [tasks, grades, isLoading, getGrade, getTasksForClass, assignFormToClasses, removeTasksForForm],
+    [
+      tasks,
+      grades,
+      isLoading,
+      getGrade,
+      getTasksForClass,
+      assignFormToClasses,
+      removeTasksForForm,
+      updateGrade,
+      publishForm,
+      refreshGradebook,
+    ],
   );
 
   return <GradesTasksContext.Provider value={value}>{children}</GradesTasksContext.Provider>;

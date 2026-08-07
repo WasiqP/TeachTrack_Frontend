@@ -54,7 +54,8 @@ const IconChevronRight = ({ color, size = 20 }: { color: string; size?: number }
 
 const Profile: React.FC<Props> = ({ navigation }) => {
   const { ink, theme } = useThemeMode();
-  const { profile, displayName, firstName, updateProfile } = useUser();
+  const { profile, displayName, firstName, updateProfile, uploadAvatar, clearLocalAvatar } =
+    useUser();
   const { classes } = useClasses();
   const { tasks } = useGradesTasks();
   const { showAlert, showSuccess } = usePulseAlert();
@@ -116,8 +117,16 @@ const Profile: React.FC<Props> = ({ navigation }) => {
         });
         return;
       }
-      const uri = response.assets?.[0]?.uri;
-      if (uri) void updateProfile({ avatarUri: uri });
+      const asset = response.assets?.[0];
+      const uri = asset?.uri;
+      if (!uri) return;
+      void uploadAvatar(uri, asset.type).catch((e: unknown) => {
+        showAlert({
+          variant: 'error',
+          title: "Couldn't upload photo",
+          message: e instanceof Error ? e.message : 'Try a smaller JPEG or PNG (max 2 MB).',
+        });
+      });
     };
 
     void launchImageLibrary(
@@ -131,11 +140,11 @@ const Profile: React.FC<Props> = ({ navigation }) => {
         message: msg,
       });
     });
-  }, [updateProfile, showAlert]);
+  }, [uploadAvatar, showAlert]);
 
   const clearPhoto = useCallback(() => {
-    void updateProfile({ avatarUri: null });
-  }, [updateProfile]);
+    void clearLocalAvatar();
+  }, [clearLocalAvatar]);
 
   const handleSaveProfile = useCallback(async () => {
     const t = nameDraft.trim();
@@ -148,21 +157,27 @@ const Profile: React.FC<Props> = ({ navigation }) => {
       return;
     }
     Keyboard.dismiss();
-    await updateProfile({
-      displayName: t,
-      email: emailDraft.trim(),
-      phone: phoneDraft.trim(),
-      country: countryDraft.trim(),
-      city: cityDraft.trim(),
-      address: addressDraft.trim(),
-      institutionName: institutionDraft.trim(),
-      professionalTitle: titleDraft.trim(),
-      subjectsTeach: subjectsDraft.trim(),
-    });
-    showSuccess('Saved', 'Your profile is updated.');
+    try {
+      await updateProfile({
+        displayName: t,
+        phone: phoneDraft.trim(),
+        country: countryDraft.trim(),
+        city: cityDraft.trim(),
+        address: addressDraft.trim(),
+        institutionName: institutionDraft.trim(),
+        professionalTitle: titleDraft.trim(),
+        subjectsTeach: subjectsDraft.trim(),
+      });
+      showSuccess('Saved', 'Your profile is updated.');
+    } catch (e) {
+      showAlert({
+        variant: 'error',
+        title: "Couldn't save",
+        message: e instanceof Error ? e.message : 'Check your connection and try again.',
+      });
+    }
   }, [
     nameDraft,
-    emailDraft,
     phoneDraft,
     countryDraft,
     cityDraft,

@@ -8,26 +8,31 @@ import {
   Image,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { fonts as F, radius, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import { usePulseAlert } from '../context/AlertModalContext';
+import { useAuth } from '../context/AuthContext';
 import { PulseScrollView } from '../components/PulseScrollView';
 import ScreenFrame from '../components/layout/ScreenFrame';
 import { scaleFont, useResponsive } from '../ui/responsive';
+import { authErrorAlert } from '../api/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 
 const SignUp: React.FC<Props> = ({ navigation }) => {
   const { ink, theme } = useThemeMode();
   const { showAlert } = usePulseAlert();
+  const { signUp } = useAuth();
   const r = useResponsive();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const handleBack = () => {
     if (navigation.canGoBack()) {
@@ -234,9 +239,10 @@ const SignUp: React.FC<Props> = ({ navigation }) => {
             />
 
             <Pressable
-              style={styles.primaryBtn}
+              style={[styles.primaryBtn, busy && { opacity: 0.7 }]}
               android_ripple={{ color: theme.rippleLight }}
-              onPress={() => {
+              disabled={busy}
+              onPress={async () => {
                 if (!name.trim() || !email.trim()) {
                   showAlert({
                     variant: 'warning',
@@ -245,7 +251,15 @@ const SignUp: React.FC<Props> = ({ navigation }) => {
                   });
                   return;
                 }
-                if (!password.trim() || password !== confirm) {
+                if (!password.trim() || password.length < 8) {
+                  showAlert({
+                    variant: 'warning',
+                    title: 'Check your password',
+                    message: 'Password must be at least 8 characters.',
+                  });
+                  return;
+                }
+                if (password !== confirm) {
                   showAlert({
                     variant: 'warning',
                     title: 'Check your password',
@@ -253,14 +267,27 @@ const SignUp: React.FC<Props> = ({ navigation }) => {
                   });
                   return;
                 }
-                navigation.replace('VerifyOtp', {
-                  email: email.trim(),
-                  purpose: 'signup',
-                  name: name.trim(),
-                });
+                setBusy(true);
+                try {
+                  await signUp(name.trim(), email.trim(), password);
+                  navigation.replace('VerifyOtp', {
+                    email: email.trim(),
+                    purpose: 'signup',
+                    name: name.trim(),
+                  });
+                } catch (err) {
+                  const a = authErrorAlert(err);
+                  showAlert({ variant: 'error', title: a.title, message: a.message });
+                } finally {
+                  setBusy(false);
+                }
               }}
             >
-              <Text style={styles.primaryLabel}>Sign Up</Text>
+              {busy ? (
+                <ActivityIndicator color={theme.white} />
+              ) : (
+                <Text style={styles.primaryLabel}>Sign Up</Text>
+              )}
             </Pressable>
 
             <Text style={styles.socialHint}>Sign up with socials</Text>

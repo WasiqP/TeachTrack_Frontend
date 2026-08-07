@@ -7,6 +7,7 @@ import BottomTab from '../components/BottomTab';
 import { PulseScrollView } from '../components/PulseScrollView';
 import Svg, { Path } from 'react-native-svg';
 import { useForms } from '../context/FormsContext';
+import { useGradesTasks } from '../context/GradesTasksContext';
 import FormIcon from '../components/FormIcons';
 import { PanResponder } from 'react-native';
 import ShareIcon from '../../assets/images/share.svg';
@@ -214,6 +215,7 @@ const FormItem = ({ form, onDelete, onDragStart, onDragEnd, navigation }: FormIt
 
 const MyForms: React.FC<Props> = ({ navigation, route }) => {
   const { forms, deleteForm } = useForms();
+  const { removeTasksForForm } = useGradesTasks();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [trashScale] = useState(new Animated.Value(1));
   
@@ -238,6 +240,7 @@ const MyForms: React.FC<Props> = ({ navigation, route }) => {
   };
 
   const handleDelete = async (id: string) => {
+    await removeTasksForForm(id);
     await deleteForm(id);
     setShowDeleteModal(true);
     setTimeout(() => {

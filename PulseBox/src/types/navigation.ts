@@ -2,6 +2,7 @@
 export type MainTabRoute = 'Home' | 'MyClasses' | 'Quizzes' | 'ViewGrades' | 'Settings';
 
 export type RootStackParamList = {
+  BootRedirect: undefined;
   GetStarted: undefined;
   Onboarding01: undefined;
   Onboarding02: undefined;
@@ -11,6 +12,8 @@ export type RootStackParamList = {
   ForgotPassword: { email?: string } | undefined;
   /** After signup or forgot-password, verify the email with a 6-digit code. */
   VerifyOtp: { email: string; purpose: 'signup' | 'reset'; name?: string };
+  /** First-run teacher profile (all user_profiles fields). */
+  TeacherProfileSetup: undefined;
   /**
    * Main teacher shell: tab panels swap in place (see `TeacherTabShell`).
    * Use `tab` when returning from another screen to open a specific tab.

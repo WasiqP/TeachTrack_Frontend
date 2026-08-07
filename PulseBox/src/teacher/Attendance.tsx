@@ -17,8 +17,6 @@ import Svg, { Path } from 'react-native-svg';
 import { PulseScrollView } from '../components/PulseScrollView';
 import {
   useClasses,
-  type ClassActivityItem,
-  type AttendanceDayRecord,
   type ClassStudentRecord,
 } from '../context/ClassesContext';
 import { parseStudentCsvRows } from '../utils/parseStudentCsv';
@@ -120,7 +118,7 @@ const Attendance: React.FC<Props> = ({ route, navigation }) => {
   );
 
   const insets = useSafeAreaInsets();
-  const { classes, updateClass } = useClasses();
+  const { classes, updateClass, saveAttendanceDay } = useClasses();
   const { showAlert, showSuccess, showError } = usePulseAlert();
   const [activeClassId, setActiveClassId] = useState<string | undefined>(() => route.params?.classId);
   const [searchQuery, setSearchQuery] = useState('');
@@ -254,43 +252,36 @@ const Attendance: React.FC<Props> = ({ route, navigation }) => {
     );
   };
 
-  const saveAttendance = (studentSnapshot?: Student[]) => {
+  const saveAttendance = async (studentSnapshot?: Student[]) => {
     const roster = studentSnapshot ?? students;
-    const present = roster.filter((s) => s.status === 'present').length;
-    const late = roster.filter((s) => s.status === 'late').length;
-    const absent = roster.filter((s) => s.status === 'absent').length;
 
-    if (activeClassId) {
-      const cls = classes.find((c) => c.id === activeClassId);
-      if (cls) {
-        const dateKey = localDateKey();
-        const entries = roster.map((s) => ({
-          studentId: s.id,
-          status: (s.status ?? 'absent') as 'present' | 'absent' | 'late',
-        }));
-        const newDay: AttendanceDayRecord = {
-          id: `att-${Date.now()}`,
-          dateKey,
-          takenAt: new Date().toISOString(),
-          entries,
-        };
-        const prevHistory = cls.attendanceHistory ?? [];
-        const withoutSameDay = prevHistory.filter((r) => r.dateKey !== dateKey);
-        const item: ClassActivityItem = {
-          id: `act-${Date.now()}`,
-          kind: 'attendance',
-          headline: 'Attendance marked',
-          detail: `${present} present · ${late} late · ${absent} absent`,
-          createdAt: new Date().toISOString(),
-        };
-        void updateClass(activeClassId, {
-          attendanceHistory: [newDay, ...withoutSameDay].slice(0, 400),
-          activityLog: [item, ...(cls.activityLog ?? [])].slice(0, 40),
-        });
-      }
+    if (!activeClassId) {
+      showSuccess('Saved', 'Attendance has been recorded.', () => navigation.goBack());
+      return;
     }
 
-    showSuccess('Saved', 'Attendance has been recorded.', () => navigation.goBack());
+    const cls = classes.find((c) => c.id === activeClassId);
+    if (!cls) {
+      showError('Class not found', 'Go back and open the class again.');
+      return;
+    }
+
+    const dateKey = localDateKey();
+    const entries = roster.map((s) => ({
+      studentId: s.id,
+      status: (s.status ?? 'absent') as 'present' | 'absent' | 'late',
+    }));
+
+    try {
+      await saveAttendanceDay(activeClassId, dateKey, entries);
+
+      showSuccess('Saved', 'Attendance has been recorded.', () => navigation.goBack());
+    } catch (e) {
+      showError(
+        'Could not save attendance',
+        e instanceof Error ? e.message : 'Check your connection and try again.',
+      );
+    }
   };
 
   const handleSave = () => {
@@ -316,7 +307,7 @@ const Attendance: React.FC<Props> = ({ route, navigation }) => {
         ],
       });
     } else {
-      saveAttendance();
+      void saveAttendance();
     }
   };
 

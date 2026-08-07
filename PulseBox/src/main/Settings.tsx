@@ -6,6 +6,7 @@ import BottomTab from '../components/BottomTab';
 import TabScreenHeaderBar from '../components/TabScreenHeaderBar';
 import { fonts as F, radius, useThemeMode } from '../theme';
 import { languageLabel, useAppSettings } from '../context/AppSettingsContext';
+import { useAuth } from '../context/AuthContext';
 import { usePulseAlert } from '../context/AlertModalContext';
 import ScreenFrame from '../components/layout/ScreenFrame';
 import { useResponsive } from '../ui/responsive';
@@ -22,6 +23,7 @@ const Settings: React.FC<Props> = ({ navigation, embedded }) => {
   const { ink, theme, scheme, toggleScheme, isDark } = useThemeMode();
   const r = useResponsive();
   const { language } = useAppSettings();
+  const { logout } = useAuth();
   const { showAlert } = usePulseAlert();
   const appVersion = packageJson.version ?? '0.0.1';
 
@@ -36,15 +38,17 @@ const Settings: React.FC<Props> = ({ navigation, embedded }) => {
           text: 'Log out',
           style: 'destructive',
           onPress: () => {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'GetStarted' }],
+            void logout().finally(() => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'GetStarted' }],
+              });
             });
           },
         },
       ],
     });
-  }, [navigation, showAlert]);
+  }, [navigation, showAlert, logout]);
 
   const styles = useMemo(
     () =>

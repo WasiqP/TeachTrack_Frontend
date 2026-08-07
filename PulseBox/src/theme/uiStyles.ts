@@ -82,6 +82,8 @@ export const ui = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: radius.btn,
     alignItems: 'center',
+    borderWidth: ink.borderWidth,
+    borderColor: ink.borderInk,
   },
   primaryBtnText: {
     fontFamily: F.outfitBold,

@@ -6,9 +6,8 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const STORAGE_KEY = '@groovebox_app_settings_v1';
+import { useAuth } from './AuthContext';
+import * as profileApi from '../api/profile';
 
 export type NotificationPrefs = {
   taskReminders: boolean;
@@ -30,7 +29,7 @@ export const LANGUAGE_OPTIONS: {
 ];
 
 export function languageLabel(code: AppLanguageCode): string {
-  return LANGUAGE_OPTIONS.find(o => o.code === code)?.label ?? 'English';
+  return LANGUAGE_OPTIONS.find((o) => o.code === code)?.label ?? 'English';
 }
 
 type AppSettingsContextType = {
@@ -38,6 +37,7 @@ type AppSettingsContextType = {
   setNotificationPrefs: (patch: Partial<NotificationPrefs>) => Promise<void>;
   language: AppLanguageCode;
   setLanguage: (code: AppLanguageCode) => Promise<void>;
+  isLoading: boolean;
 };
 
 const defaultNotifications: NotificationPrefs = {
@@ -50,81 +50,94 @@ const AppSettingsContext = createContext<AppSettingsContextType | undefined>(
   undefined,
 );
 
-type StoredShape = {
-  notifications?: Partial<NotificationPrefs>;
-  language?: AppLanguageCode;
-};
-
 type FullState = { notifications: NotificationPrefs; language: AppLanguageCode };
 
-function normalizeStored(raw: unknown): FullState {
-  const notifications = { ...defaultNotifications };
-  let language: AppLanguageCode = 'en';
-  if (raw && typeof raw === 'object') {
-    const o = raw as StoredShape;
-    if (o.notifications && typeof o.notifications === 'object') {
-      if (typeof o.notifications.taskReminders === 'boolean') {
-        notifications.taskReminders = o.notifications.taskReminders;
-      }
-      if (typeof o.notifications.gradeUpdates === 'boolean') {
-        notifications.gradeUpdates = o.notifications.gradeUpdates;
-      }
-      if (typeof o.notifications.classAnnouncements === 'boolean') {
-        notifications.classAnnouncements = o.notifications.classAnnouncements;
-      }
-    }
-    if (o.language === 'en' || o.language === 'es' || o.language === 'fr') {
-      language = o.language;
-    }
-  }
-  return { notifications, language };
+function fromServer(s: profileApi.SettingsOut): FullState {
+  const language: AppLanguageCode =
+    s.language === 'es' || s.language === 'fr' ? s.language : 'en';
+  return {
+    language,
+    notifications: {
+      taskReminders: s.notifyTaskReminders,
+      gradeUpdates: s.notifyGradeUpdates,
+      classAnnouncements: s.notifyClassAnnouncements,
+    },
+  };
 }
 
 export function AppSettingsProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isBootstrapping } = useAuth();
   const [state, setState] = useState<FullState>({
     notifications: defaultNotifications,
     language: 'en',
   });
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadFromServer = useCallback(async () => {
+    if (!isAuthenticated) {
+      setState({ notifications: defaultNotifications, language: 'en' });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const s = await profileApi.getSettings();
+      setState(fromServer(s));
+    } catch (e) {
+      console.warn('getSettings failed', e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then(raw => {
-      if (!raw) return;
-      try {
-        const parsed = JSON.parse(raw) as unknown;
-        setState(normalizeStored(parsed));
-      } catch {
-        /* ignore */
-      }
-    });
-  }, []);
-
-  const persist = useCallback(async (next: FullState) => {
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }, []);
+    if (isBootstrapping) return;
+    void loadFromServer();
+  }, [isBootstrapping, isAuthenticated, loadFromServer]);
 
   const setNotificationPrefs = useCallback(
     async (patch: Partial<NotificationPrefs>) => {
-      setState(prev => {
-        const next = {
-          ...prev,
-          notifications: { ...prev.notifications, ...patch },
-        };
-        void persist(next);
-        return next;
-      });
+      setState((prev) => ({
+        ...prev,
+        notifications: { ...prev.notifications, ...patch },
+      }));
+      if (!isAuthenticated) return;
+
+      const body: profileApi.SettingsUpdateBody = {};
+      if (patch.taskReminders !== undefined) {
+        body.notifyTaskReminders = patch.taskReminders;
+      }
+      if (patch.gradeUpdates !== undefined) {
+        body.notifyGradeUpdates = patch.gradeUpdates;
+      }
+      if (patch.classAnnouncements !== undefined) {
+        body.notifyClassAnnouncements = patch.classAnnouncements;
+      }
+      if (Object.keys(body).length === 0) return;
+
+      try {
+        const s = await profileApi.patchSettings(body);
+        setState(fromServer(s));
+      } catch (e) {
+        console.warn('patchSettings failed', e);
+        throw e;
+      }
     },
-    [persist],
+    [isAuthenticated],
   );
 
   const setLanguage = useCallback(
     async (code: AppLanguageCode) => {
-      setState(prev => {
-        const next = { ...prev, language: code };
-        void persist(next);
-        return next;
-      });
+      setState((prev) => ({ ...prev, language: code }));
+      if (!isAuthenticated) return;
+      try {
+        const s = await profileApi.patchSettings({ language: code });
+        setState(fromServer(s));
+      } catch (e) {
+        console.warn('setLanguage failed', e);
+        throw e;
+      }
     },
-    [persist],
+    [isAuthenticated],
   );
 
   const value = useMemo(
@@ -133,8 +146,9 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
       setNotificationPrefs,
       language: state.language,
       setLanguage,
+      isLoading,
     }),
-    [state.notifications, state.language, setNotificationPrefs, setLanguage],
+    [state.notifications, state.language, setNotificationPrefs, setLanguage, isLoading],
   );
 
   return (

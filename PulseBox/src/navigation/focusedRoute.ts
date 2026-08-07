@@ -2,6 +2,7 @@ import type { NavigationState, PartialState } from '@react-navigation/native';
 
 /** Routes that use auth-style transitions + branded overlay (login / sign-up flow). */
 const AUTH_FLOW_ROUTE_NAMES = new Set<string>([
+  'BootRedirect',
   'GetStarted',
   'Onboarding01',
   'Onboarding02',
@@ -10,6 +11,7 @@ const AUTH_FLOW_ROUTE_NAMES = new Set<string>([
   'SignUp',
   'ForgotPassword',
   'VerifyOtp',
+  'TeacherProfileSetup',
 ]);
 
 export function isAuthFlowRoute(name: string | undefined): boolean {

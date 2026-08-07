@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ import { PulseScrollView } from '../components/PulseScrollView';
 import { usePulseAlert } from '../context/AlertModalContext';
 import Svg, { Path } from 'react-native-svg';
 import { useFocusEffect } from '@react-navigation/native';
+import { ApiError } from '../api/client';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShareTask'>;
 
@@ -100,20 +101,46 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
   const { ink, theme, isDark } = useThemeMode();
   const { formId } = route.params;
   const { forms } = useForms();
-  const { classes, updateClass } = useClasses();
-  const { assignFormToClasses } = useGradesTasks();
+  const { classes, refreshClass } = useClasses();
+  const { assignFormToClasses, publishForm } = useGradesTasks();
   const { showSuccess, showError } = usePulseAlert();
   const form = forms.find((f) => f.id === formId);
 
   const [mainTab, setMainTab] = useState<'classes' | 'link' | 'qr'>('classes');
   const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(new Set());
   const [assigning, setAssigning] = useState(false);
+  const [formLink, setFormLink] = useState('');
+  const [linkLoading, setLinkLoading] = useState(false);
   const viewShotRef = useRef<any>(null);
   const exitOpacity = useRef(new Animated.Value(1)).current;
   const exitTranslate = useRef(new Animated.Value(0)).current;
   const exitScale = useRef(new Animated.Value(1)).current;
 
-  const formLink = form ? `https://pulsebox.app/form/${formId}` : '';
+  useEffect(() => {
+    if (!formId || !form) {
+      setFormLink('');
+      return;
+    }
+    let cancelled = false;
+    setLinkLoading(true);
+    void (async () => {
+      try {
+        const { shareUrl } = await publishForm(formId);
+        if (!cancelled) setFormLink(shareUrl);
+      } catch (e) {
+        if (!cancelled) {
+          setFormLink('');
+          const msg = e instanceof ApiError ? e.message : 'Could not create share link.';
+          showError('Share link', msg);
+        }
+      } finally {
+        if (!cancelled) setLinkLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [formId, form?.id, publishForm, showError]);
 
   const taskKind = useMemo(
     () => mapFormKindToTaskKind(form?.answers?.taskKind ?? form?.answers?.assessmentType),
@@ -674,21 +701,10 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
         targets,
       });
 
-      for (const c of sortedClasses) {
-        if (!selectedClassIds.has(c.id)) continue;
-        await updateClass(c.id, {
-          activityLog: [
-            {
-              id: `act-task-${form.id}-${c.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              kind: 'task_assigned',
-              headline: `Task assigned: ${form.name}`,
-              detail: 'Students can open the shared link or see this task in View grades.',
-              createdAt: new Date().toISOString(),
-            },
-            ...(c.activityLog ?? []),
-          ],
-        });
-      }
+      // Server auto-logs task_assigned activity per class
+      await Promise.all(
+        targets.map((t) => refreshClass(t.classId).catch(() => undefined)),
+      );
 
       const n = selectedClassIds.size;
       setAssigning(false);
@@ -703,7 +719,8 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
       );
     } catch (e) {
       if (__DEV__) console.warn('assign to classes failed', e);
-      showError('Could not assign', 'Something went wrong. Try again.');
+      const msg = e instanceof ApiError ? e.message : 'Something went wrong. Try again.';
+      showError('Could not assign', msg);
       setAssigning(false);
     }
   };
@@ -901,24 +918,47 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
                 the web.
               </Text>
               <Text style={styles.fieldLabel}>Task link</Text>
-              <View style={styles.linkField}>
-                <TextInput
-                  style={styles.linkInput}
-                  value={formLink}
-                  editable={false}
-                  selectTextOnFocus
-                />
-                <Pressable style={styles.copyCompact} onPress={copyToClipboard} hitSlop={8}>
-                  <Text style={styles.copyCompactTxt}>Copy</Text>
-                </Pressable>
-              </View>
-              <Text style={styles.helper}>The PulseBox app is not required for students to respond.</Text>
-              <Pressable style={styles.primaryOutlineBtn} onPress={openInBrowser} android_ripple={{ color: theme.rippleLight }}>
+              {linkLoading ? (
+                <View style={[styles.linkField, { justifyContent: 'center', minHeight: 48 }]}>
+                  <ActivityIndicator color={theme.primary} />
+                </View>
+              ) : (
+                <View style={styles.linkField}>
+                  <TextInput
+                    style={styles.linkInput}
+                    value={formLink || 'Link unavailable'}
+                    editable={false}
+                    selectTextOnFocus
+                  />
+                  <Pressable
+                    style={[styles.copyCompact, !formLink && { opacity: 0.4 }]}
+                    onPress={copyToClipboard}
+                    disabled={!formLink}
+                    hitSlop={8}
+                  >
+                    <Text style={styles.copyCompactTxt}>Copy</Text>
+                  </Pressable>
+                </View>
+              )}
+              <Text style={styles.helper}>
+                Share link is ready now; student fill on the public page is coming next from the API.
+              </Text>
+              <Pressable
+                style={[styles.primaryOutlineBtn, !formLink && { opacity: 0.4 }]}
+                onPress={openInBrowser}
+                disabled={!formLink}
+                android_ripple={{ color: theme.rippleLight }}
+              >
                 <Text style={styles.primaryOutlineTxt}>Open in browser</Text>
               </Pressable>
 
               <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Share sheet</Text>
-              <Pressable style={styles.shareRow} onPress={shareLink} android_ripple={{ color: theme.rippleLight }}>
+              <Pressable
+                style={[styles.shareRow, !formLink && { opacity: 0.4 }]}
+                onPress={shareLink}
+                disabled={!formLink}
+                android_ripple={{ color: theme.rippleLight }}
+              >
                 <ShareIcon width={22} height={22} stroke={ink.ink} />
                 <Text style={styles.shareRowTxt}>Share via system menu…</Text>
               </Pressable>
@@ -926,8 +966,9 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
               <Text style={styles.fieldLabel}>Quick channels</Text>
               <View style={styles.socialRow}>
                 <Pressable
-                  style={styles.socialBtn}
+                  style={[styles.socialBtn, !formLink && { opacity: 0.4 }]}
                   onPress={() => shareOnSocial('whatsapp')}
+                  disabled={!formLink}
                   android_ripple={{ color: theme.rippleLight }}
                 >
                   <View style={[styles.socialDot, { backgroundColor: '#25D366' }]}>
@@ -936,8 +977,9 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
                   <Text style={styles.socialLbl}>WhatsApp</Text>
                 </Pressable>
                 <Pressable
-                  style={styles.socialBtn}
+                  style={[styles.socialBtn, !formLink && { opacity: 0.4 }]}
                   onPress={() => shareOnSocial('email')}
+                  disabled={!formLink}
                   android_ripple={{ color: theme.rippleLight }}
                 >
                   <View style={[styles.socialDot, { backgroundColor: '#4285F4' }]}>
@@ -946,8 +988,9 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
                   <Text style={styles.socialLbl}>Email</Text>
                 </Pressable>
                 <Pressable
-                  style={styles.socialBtn}
+                  style={[styles.socialBtn, !formLink && { opacity: 0.4 }]}
                   onPress={() => shareOnSocial('sms')}
+                  disabled={!formLink}
                   android_ripple={{ color: theme.rippleLight }}
                 >
                   <View style={[styles.socialDot, { backgroundColor: '#34B7F1' }]}>
@@ -966,15 +1009,29 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
               </Text>
               <View style={styles.qrFrame}>
                 <View ref={viewShotRef} style={styles.qrCard}>
-                  <QRCode value={formLink} size={qrSize} color="#000000" backgroundColor="#FFFFFF" />
+                  {linkLoading || !formLink ? (
+                    <ActivityIndicator color={theme.primary} style={{ marginVertical: 40 }} />
+                  ) : (
+                    <QRCode value={formLink} size={qrSize} color="#000000" backgroundColor="#FFFFFF" />
+                  )}
                   <Text style={styles.qrTitle}>{form.name}</Text>
                   <Text style={styles.qrSub}>Scan to open task</Text>
                 </View>
               </View>
-              <Pressable style={styles.saveBtn} onPress={saveQRCode} android_ripple={{ color: theme.rippleLight }}>
+              <Pressable
+                style={[styles.saveBtn, (!formLink || linkLoading) && { opacity: 0.4 }]}
+                onPress={saveQRCode}
+                disabled={!formLink || linkLoading}
+                android_ripple={{ color: theme.rippleLight }}
+              >
                 <Text style={styles.saveBtnTxt}>Save QR image</Text>
               </Pressable>
-              <Pressable style={styles.qrFooterBtn} onPress={shareLink} android_ripple={{ color: theme.rippleLight }}>
+              <Pressable
+                style={[styles.qrFooterBtn, !formLink && { opacity: 0.4 }]}
+                onPress={shareLink}
+                disabled={!formLink}
+                android_ripple={{ color: theme.rippleLight }}
+              >
                 <ShareIcon width={18} height={18} stroke={ink.ink} />
                 <Text style={styles.qrFooterTxt}>Share link instead</Text>
               </Pressable>

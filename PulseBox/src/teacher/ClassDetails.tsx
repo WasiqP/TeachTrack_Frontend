@@ -9,7 +9,6 @@ import { PulseScrollView } from '../components/PulseScrollView';
 import Svg, { Path } from 'react-native-svg';
 import {
   useClasses,
-  type ClassAnnouncement,
   type ClassActivityItem,
   type ClassActivityKind,
 } from '../context/ClassesContext';
@@ -108,7 +107,7 @@ const ClassDetails: React.FC<Props> = ({ route, navigation }) => {
   );
 
   const { classId } = route.params;
-  const { classes, deleteClass, updateClass } = useClasses();
+  const { classes, deleteClass, updateClass, postAnnouncement: postAnnouncementApi } = useClasses();
   const { getTasksForClass } = useGradesTasks();
   const { showAlert, showSuccess } = usePulseAlert();
   const [announcementDraft, setAnnouncementDraft] = useState('');
@@ -187,27 +186,18 @@ const ClassDetails: React.FC<Props> = ({ route, navigation }) => {
       });
       return;
     }
-    const createdAt = new Date().toISOString();
-    const next: ClassAnnouncement = {
-      id: `ann-${Date.now()}`,
-      body,
-      createdAt,
-    };
-    const merged = [next, ...(classData.announcements ?? [])];
-    const activity: ClassActivityItem = {
-      id: `act-${Date.now()}`,
-      kind: 'announcement',
-      headline: 'Posted an announcement',
-      detail: body.length > 100 ? `${body.slice(0, 100)}…` : body,
-      createdAt,
-    };
-    void updateClass(classData.id, {
-      announcements: merged,
-      activityLog: [activity, ...(classData.activityLog ?? [])].slice(0, 40),
-    }).then(() => {
-      setAnnouncementDraft('');
-      showSuccess('Posted', 'Your announcement was added for this class.');
-    });
+    void postAnnouncementApi(classData.id, body)
+      .then(() => {
+        setAnnouncementDraft('');
+        showSuccess('Posted', 'Your announcement was added for this class.');
+      })
+      .catch((e) => {
+        showAlert({
+          variant: 'warning',
+          title: 'Could not post',
+          message: e instanceof Error ? e.message : 'Try again.',
+        });
+      });
   };
 
   const confirmDelete = () => {

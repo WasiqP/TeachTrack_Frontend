@@ -1,19 +1,29 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, Image, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { fonts as F, radius, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import ScreenFrame from '../components/layout/ScreenFrame';
 import { scaleFont, useResponsive } from '../ui/responsive';
+import { useAuth } from '../context/AuthContext';
+import { useUser } from '../context/UserContext';
+import { usePulseAlert } from '../context/AlertModalContext';
+import { authErrorAlert } from '../api/errors';
+import { ApiError } from '../api/client';
+import { resolveAuthenticatedRoute } from '../utils/profileSetup';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const Login: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
   const { ink, theme } = useThemeMode();
   const r = useResponsive();
+  const { signIn } = useAuth();
+  const { hydrateFromServer } = useUser();
+  const { showAlert } = usePulseAlert();
 
   const styles = useMemo(
     () =>
@@ -136,6 +146,54 @@ const Login: React.FC<Props> = ({ navigation }) => {
     }
   };
 
+  const handleSignIn = async () => {
+    const e = email.trim();
+    const p = password;
+    if (!e || !p) {
+      showAlert({
+        variant: 'warning',
+        title: 'Missing information',
+        message: 'Enter your email and password.',
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      await signIn(e, p);
+      const fresh = await hydrateFromServer();
+      const dest = resolveAuthenticatedRoute(
+        fresh ?? {
+          displayName: '',
+          avatarUri: null,
+          email: '',
+          phone: '',
+          country: '',
+          city: '',
+          address: '',
+          institutionName: '',
+          professionalTitle: '',
+          subjectsTeach: '',
+          timezone: '',
+        },
+      );
+      navigation.reset({ index: 0, routes: [{ name: dest }] });
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED') {
+        showAlert({
+          variant: 'warning',
+          title: 'Verify your email',
+          message: err.message,
+        });
+        navigation.navigate('VerifyOtp', { email: e, purpose: 'signup' });
+        return;
+      }
+      const a = authErrorAlert(err);
+      showAlert({ variant: 'error', title: a.title, message: a.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <ScreenFrame style={styles.screen} edges={['top', 'bottom']}>
       <BackButton onPress={handleBack} style={styles.backBtn} />
@@ -160,6 +218,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
           autoCapitalize="none"
           keyboardType="email-address"
           style={[styles.input, styles.inputFirst]}
+          editable={!busy}
         />
         <TextInput
           value={password}
@@ -168,29 +227,33 @@ const Login: React.FC<Props> = ({ navigation }) => {
           placeholderTextColor={ink.inkSoft}
           secureTextEntry
           style={styles.input}
+          editable={!busy}
         />
         <Pressable
-          style={styles.primaryBtn}
+          style={[styles.primaryBtn, busy && { opacity: 0.7 }]}
           android_ripple={{ color: theme.rippleLight }}
+          onPress={handleSignIn}
+          disabled={busy}
+        >
+          {busy ? (
+            <ActivityIndicator color={theme.white} />
+          ) : (
+            <Text style={styles.primaryLabel}>Sign In</Text>
+          )}
+        </Pressable>
+        <Pressable
           onPress={() =>
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Home' }],
-            })
+            navigation.navigate('ForgotPassword', { email: email.trim() || undefined })
           }
         >
-          <Text style={styles.primaryLabel}>Log In</Text>
-        </Pressable>
-        <Pressable onPress={() => navigation.navigate('ForgotPassword')} hitSlop={8}>
           <Text style={styles.forgot}>Forgot password?</Text>
         </Pressable>
-        <Pressable onPress={() => navigation.navigate('SignUp')} hitSlop={8}>
+        <Pressable onPress={() => navigation.navigate('SignUp')}>
           <Text style={styles.alt}>
-            {"Don't have an account? "}
-            <Text style={styles.altLink}>Sign Up</Text>
+            New here? <Text style={styles.altLink}>Create an account</Text>
           </Text>
         </Pressable>
-        <Text style={styles.socialHint}>Log in with socials</Text>
+        <Text style={styles.socialHint}>Or continue with</Text>
         <View style={styles.socialRow}>
           <Pressable style={styles.socialBtn} android_ripple={{ color: 'rgba(255,255,255,0.15)' }}>
             <Text style={styles.socialText}>G</Text>

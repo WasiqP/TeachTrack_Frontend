@@ -135,8 +135,8 @@ const Quizzes: React.FC<Props> = ({ navigation, embedded }) => {
             onPress: () => {
               void (async () => {
                 try {
-                  await deleteForm(formId);
                   await removeTasksForForm(formId);
+                  await deleteForm(formId);
                   showSuccess('Task deleted', `"${title}" has been removed.`);
                 } catch {
                   showError('Could not delete', 'Please try again.');

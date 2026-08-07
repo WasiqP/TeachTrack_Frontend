@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
+  ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
@@ -17,9 +18,11 @@ import { fonts as F, radius, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import { PulseScrollView } from '../components/PulseScrollView';
 import { useUser } from '../context/UserContext';
+import { useAuth } from '../context/AuthContext';
 import { usePulseAlert } from '../context/AlertModalContext';
 import ScreenFrame from '../components/layout/ScreenFrame';
 import { scaleFont, useResponsive } from '../ui/responsive';
+import { authErrorAlert } from '../api/errors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'VerifyOtp'>;
 
@@ -32,9 +35,13 @@ const VerifyOtp: React.FC<Props> = ({ navigation, route }) => {
   const r = useResponsive();
   const { email, purpose, name } = route.params;
   const { setDisplayName } = useUser();
+  const { verifyOtp, resendOtp, resetPassword } = useAuth();
   const { showAlert, showSuccess } = usePulseAlert();
 
   const [digits, setDigits] = useState<string[]>(() => Array(OTP_LENGTH).fill(''));
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [busy, setBusy] = useState(false);
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const [resendIn, setResendIn] = useState(RESEND_SECONDS);
 
@@ -88,45 +95,74 @@ const VerifyOtp: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
-    // Demo: accept any 6-digit code; replace with API check later.
-    const mockValid = /^\d{6}$/.test(code);
-    if (!mockValid) {
-      showAlert({
-        variant: 'error',
-        title: 'Invalid code',
-        message: 'Please check the code and try again.',
-      });
+    if (purpose === 'reset') {
+      if (newPassword.length < 8) {
+        showAlert({
+          variant: 'warning',
+          title: 'New password',
+          message: 'Password must be at least 8 characters.',
+        });
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        showAlert({
+          variant: 'warning',
+          title: 'Passwords don’t match',
+          message: 'Make sure both password fields match.',
+        });
+        return;
+      }
+      setBusy(true);
+      try {
+        await resetPassword(email, code, newPassword);
+        showSuccess('Password updated', 'Sign in with your new password.', () => {
+          navigation.replace('Login');
+        });
+      } catch (err) {
+        const a = authErrorAlert(err);
+        showAlert({ variant: 'error', title: a.title, message: a.message });
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
-    if (purpose === 'signup') {
+    setBusy(true);
+    try {
+      await verifyOtp(email, code);
       if (name?.trim()) {
         await setDisplayName(name.trim());
       }
-      showSuccess('You’re verified', 'Welcome to GrooveBox.', () => {
+      showSuccess('You’re verified', 'Set up your teacher profile to continue.', () => {
         navigation.reset({
           index: 0,
-          routes: [{ name: 'Home' }],
+          routes: [{ name: 'TeacherProfileSetup' }],
         });
       });
-      return;
+    } catch (err) {
+      const a = authErrorAlert(err);
+      showAlert({ variant: 'error', title: a.title, message: a.message });
+    } finally {
+      setBusy(false);
     }
-
-    showSuccess('Email verified', 'Return to log in and use your password.', () => {
-      navigation.replace('Login');
-    });
   };
 
-  const handleResend = () => {
-    if (resendIn > 0) return;
+  const handleResend = async () => {
+    if (resendIn > 0 || purpose !== 'signup') return;
     setResendIn(RESEND_SECONDS);
     setDigits(Array(OTP_LENGTH).fill(''));
     focusIndex(0);
-    showAlert({
-      variant: 'info',
-      title: 'Code sent',
-      message: `We sent a new code to ${email}.`,
-    });
+    try {
+      await resendOtp(email);
+      showAlert({
+        variant: 'info',
+        title: 'Code sent',
+        message: `We sent a new code to ${email}. (In dev, check the backend terminal.)`,
+      });
+    } catch (err) {
+      const a = authErrorAlert(err);
+      showAlert({ variant: 'error', title: a.title, message: a.message });
+    }
   };
 
   const title = purpose === 'signup' ? 'Verify your email' : 'Enter verification code';
@@ -277,6 +313,19 @@ const VerifyOtp: React.FC<Props> = ({ navigation, route }) => {
           color: theme.primary,
           fontFamily: F.outfitBold,
         },
+        input: {
+          width: '100%',
+          borderWidth: ink.borderWidth,
+          borderColor: ink.borderInk,
+          borderRadius: radius.input,
+          paddingHorizontal: 16,
+          paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+          fontSize: 15,
+          fontFamily: F.dmRegular,
+          color: ink.ink,
+          marginTop: 10,
+          backgroundColor: ink.canvas,
+        },
       }),
     [ink, theme, r.gutter, r.contentMaxWidth, r.titleScale],
   );
@@ -334,31 +383,68 @@ const VerifyOtp: React.FC<Props> = ({ navigation, route }) => {
                   keyboardType="number-pad"
                   maxLength={index === 0 ? 6 : 1}
                   selectTextOnFocus
+                  editable={!busy}
                   accessibilityLabel={`Digit ${index + 1}`}
                 />
               ))}
             </View>
 
+            {purpose === 'reset' ? (
+              <>
+                <TextInput
+                  style={styles.input}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="New password (min 8 chars)"
+                  placeholderTextColor={ink.inkSoft}
+                  secureTextEntry
+                  editable={!busy}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirm new password"
+                  placeholderTextColor={ink.inkSoft}
+                  secureTextEntry
+                  editable={!busy}
+                />
+              </>
+            ) : null}
+
             <Pressable
-              style={[styles.primaryBtn, code.length !== OTP_LENGTH && styles.primaryBtnDim]}
+              style={[
+                styles.primaryBtn,
+                (code.length !== OTP_LENGTH || busy) && styles.primaryBtnDim,
+              ]}
               android_ripple={{ color: theme.rippleLight }}
-              disabled={code.length !== OTP_LENGTH}
+              disabled={code.length !== OTP_LENGTH || busy}
               onPress={handleVerify}
             >
-              <Text style={styles.primaryLabel}>
-                {purpose === 'signup' ? 'Verify & continue' : 'Verify code'}
-              </Text>
+              {busy ? (
+                <ActivityIndicator color={theme.white} />
+              ) : (
+                <Text style={styles.primaryLabel}>
+                  {purpose === 'signup' ? 'Verify & continue' : 'Reset password'}
+                </Text>
+              )}
             </Pressable>
 
             <View style={styles.resendRow}>
-              {resendIn > 0 ? (
-                <Text style={styles.resendMuted}>
-                  Resend code in <Text style={styles.resendBold}>{resendIn}s</Text>
-                </Text>
+              {purpose === 'signup' ? (
+                resendIn > 0 ? (
+                  <Text style={styles.resendMuted}>
+                    Resend code in <Text style={styles.resendBold}>{resendIn}s</Text>
+                  </Text>
+                ) : (
+                  <Pressable onPress={handleResend} hitSlop={12}>
+                    <Text style={styles.resendLink}>Didn’t get it? Resend code</Text>
+                  </Pressable>
+                )
               ) : (
-                <Pressable onPress={handleResend} hitSlop={12}>
-                  <Text style={styles.resendLink}>Didn’t get it? Resend code</Text>
-                </Pressable>
+                <Text style={styles.resendMuted}>
+                  Use the code from your email (dev: backend terminal).
+                </Text>
               )}
             </View>
 

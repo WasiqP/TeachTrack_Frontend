@@ -401,7 +401,19 @@ const CreateClass: React.FC<Props> = ({ navigation }) => {
       createdAt: new Date().toISOString(),
     };
 
-    await addClass(newClass);
+    try {
+      await addClass(newClass);
+    } catch (e) {
+      showAlert({
+        variant: 'error',
+        title: 'Could not create class',
+        message:
+          e instanceof Error
+            ? e.message
+            : 'Check that you are signed in and the backend is reachable.',
+      });
+      return;
+    }
 
     showSuccess(
       'Class created',

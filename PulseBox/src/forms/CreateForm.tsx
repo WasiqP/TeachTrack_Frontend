@@ -136,8 +136,19 @@ const CreateForm: React.FC<Props> = ({ navigation }) => {
       },
     };
 
-    await addForm(formData);
-    navigation.replace('EditForm', { formId: id });
+    try {
+      const created = await addForm(formData);
+      navigation.replace('EditForm', { formId: created.id });
+    } catch (e) {
+      showAlert({
+        title: 'Could not create form',
+        message:
+          e instanceof Error
+            ? e.message
+            : 'Check that you are signed in and the backend is reachable.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    }
   }, [
     classes,
     classId,
