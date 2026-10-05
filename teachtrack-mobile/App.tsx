@@ -12,13 +12,14 @@ import {
   DefaultTheme as NavDefaultTheme,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
 import { FormsProvider } from './src/context/FormsContext';
 import { ClassesProvider } from './src/context/ClassesContext';
 import { GradesTasksProvider } from './src/context/GradesTasksContext';
 import { UserProvider } from './src/context/UserContext';
 import { AppSettingsProvider } from './src/context/AppSettingsContext';
 import { AlertModalProvider } from './src/context/AlertModalContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ThemeProvider, useThemeMode } from './src/theme';
 
 // Import screens
@@ -31,6 +32,7 @@ import Login from './src/authentication/Login';
 import SignUp from './src/authentication/SignUp';
 import ForgotPassword from './src/authentication/ForgotPassword';
 import VerifyOtp from './src/authentication/VerifyOtp';
+import ResetPassword from './src/authentication/ResetPassword';
 import TeacherTabShell from './src/main/TeacherTabShell';
 import MyForms from './src/main/MyForms';
 import CreateForm from './src/forms/CreateForm';
@@ -73,6 +75,7 @@ const SPLASH_MS = 2000;
 
 function AppNavigation() {
   const { ink, theme, contentOpacity, isDark } = useThemeMode();
+  const { isAuthenticated } = useAuth();
   const [navTick, setNavTick] = useState(0);
   const routeNameRef = React.useRef<string | undefined>(undefined);
 
@@ -96,10 +99,12 @@ function AppNavigation() {
     <>
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
-        backgroundColor={ink.canvas}
+        backgroundColor="transparent"
+        translucent
       />
       <Animated.View style={{ flex: 1, opacity: contentOpacity }}>
         <NavigationContainer
+          key={isAuthenticated ? 'app' : 'auth'}
           theme={navigationTheme}
           onStateChange={(state) => {
             const name = getFocusedRouteNameFromState(state);
@@ -115,7 +120,7 @@ function AppNavigation() {
           }}
         >
           <Stack.Navigator
-            initialRouteName="GetStarted"
+            initialRouteName={isAuthenticated ? 'Home' : 'GetStarted'}
             screenOptions={{
               headerShown: false,
               contentStyle: { backgroundColor: ink.canvas },
@@ -129,6 +134,7 @@ function AppNavigation() {
             <Stack.Screen name="SignUp" component={SignUp} options={instantAuthScreenOptions} />
             <Stack.Screen name="ForgotPassword" component={ForgotPassword} options={instantAuthScreenOptions} />
             <Stack.Screen name="VerifyOtp" component={VerifyOtp} options={instantAuthScreenOptions} />
+            <Stack.Screen name="ResetPassword" component={ResetPassword} options={instantAuthScreenOptions} />
             <Stack.Screen
               name="Home"
               component={TeacherTabShell}
@@ -182,29 +188,37 @@ function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <ThemeProvider>
         <AlertModalProvider>
-          <UserProvider>
-            <AppSettingsProvider>
-            <FormsProvider>
-              <ClassesProvider>
-                <GradesTasksProvider>
-                  {showSplash ? (
-                    <SplashScreen />
-                  ) : (
-                    <View style={{ flex: 1 }}>
-                      <AppNavigation />
-                    </View>
-                  )}
-                </GradesTasksProvider>
-              </ClassesProvider>
-            </FormsProvider>
-            </AppSettingsProvider>
-          </UserProvider>
+          <AuthProvider>
+            <AppGate showSplash={showSplash} />
+          </AuthProvider>
         </AlertModalProvider>
       </ThemeProvider>
     </SafeAreaProvider>
+  );
+}
+
+function AppGate({ showSplash }: { showSplash: boolean }) {
+  const { isBootstrapping } = useAuth();
+  if (showSplash || isBootstrapping) {
+    return <SplashScreen />;
+  }
+  return (
+    <UserProvider>
+      <AppSettingsProvider>
+        <FormsProvider>
+          <ClassesProvider>
+            <GradesTasksProvider>
+              <View style={{ flex: 1 }}>
+                <AppNavigation />
+              </View>
+            </GradesTasksProvider>
+          </ClassesProvider>
+        </FormsProvider>
+      </AppSettingsProvider>
+    </UserProvider>
   );
 }
 

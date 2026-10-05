@@ -26,7 +26,7 @@ import {
   type TaskKind,
   type TaskGradeRecord,
 } from '../context/GradesTasksContext';
-import { fonts as F } from '../theme';
+import { fonts as F, TAB_SAFE_EDGES } from '../theme';
 import Svg, { Path } from 'react-native-svg';
 import { useViewGradesStyles } from './useViewGradesStyles';
 
@@ -244,7 +244,7 @@ const ViewGrades: React.FC<Props> = ({ navigation, embedded, active }) => {
   }, [taskFilter, tasks, classById, classFilter]);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={TAB_SAFE_EDGES}>
       <View style={styles.content}>
         {isLoading ? (
           <View style={styles.loading}>

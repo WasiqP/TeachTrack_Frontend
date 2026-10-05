@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useThemeMode } from '../theme';
 
 interface FormDetailsModalProps {
   visible: boolean;
@@ -348,7 +348,7 @@ const FormDetailsModal: React.FC<FormDetailsModalProps> = ({ visible, onClose, o
       animationType="fade"
       onRequestClose={onClose}
     >
-      <SafeAreaView style={styles.modalOverlay} edges={['top', 'bottom']}>
+      <SafeAreaView style={styles.modalOverlay} edges={STACK_SAFE_EDGES}>
         <Pressable style={styles.backdrop} onPress={onClose} />
 
         <View style={styles.modalContainer}>

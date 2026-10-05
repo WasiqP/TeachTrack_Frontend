@@ -84,6 +84,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        // Local HTTP API (emulator 10.0.2.2 / LAN). Debug overlay also forces this.
+        manifestPlaceholders = [usesCleartextTraffic: "true"]
     }
     // Native object paths embed the full project path; a short staging dir keeps them under Windows' 260-char limit.
     externalNativeBuild {

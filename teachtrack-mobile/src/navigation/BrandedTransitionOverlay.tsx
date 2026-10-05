@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import {
   Animated,
-  Dimensions,
   Image,
   StyleSheet,
   View,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { useThemeMode } from '../theme';
-
-const { width, height } = Dimensions.get('window');
 
 type Props = {
   /** Increments on each navigation; overlay animates when tick changes. */
@@ -22,6 +20,7 @@ type Props = {
  */
 export default function BrandedTransitionOverlay({ tick }: Props) {
   const { theme } = useThemeMode();
+  const { width, height } = useWindowDimensions();
   const veil = useRef(new Animated.Value(0)).current;
   const logo = useRef(new Animated.Value(0.9)).current;
   const runRef = useRef(0);
@@ -49,7 +48,7 @@ export default function BrandedTransitionOverlay({ tick }: Props) {
           maxHeight: 120,
         },
       }),
-    [theme.primary],
+    [theme.primary, width, height],
   );
 
   useEffect(() => {

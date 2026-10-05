@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, Pressable, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { STACK_SAFE_EDGES } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import BackButton from '../components/Reusable-Components/BackButton';
@@ -231,7 +232,7 @@ const ClassDetails: React.FC<Props> = ({ route, navigation }) => {
 
   if (!classData) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={STACK_SAFE_EDGES}>
         <View style={styles.header}>
           <BackButton
             style={styles.backBtn}
@@ -254,7 +255,7 @@ const ClassDetails: React.FC<Props> = ({ route, navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={STACK_SAFE_EDGES}>
       {/* Header */}
       <View style={styles.header}>
         <BackButton

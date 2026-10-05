@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { TAB_SAFE_EDGES } from '../theme';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import BottomTab from '../components/BottomTab';
@@ -166,49 +167,7 @@ const Quizzes: React.FC<Props> = ({ navigation, embedded }) => {
     [forms],
   );
 
-  const mockQuizzes: Quiz[] = useMemo(
-    () =>
-      forms.length === 0
-        ? [
-            {
-              id: 'demo-1',
-              title: 'Algebra Quiz — Chapter 5',
-              type: 'quiz',
-              classId: '1',
-              className: 'Mathematics 101',
-              dueDate: '2026-03-15',
-              submissions: 24,
-              totalStudents: 28,
-              createdAt: new Date().toISOString(),
-            },
-            {
-              id: 'demo-2',
-              title: 'Essay: Shakespeare analysis',
-              type: 'assignment',
-              classId: '2',
-              className: 'English Literature',
-              dueDate: '2026-03-22',
-              submissions: 18,
-              totalStudents: 24,
-              createdAt: new Date().toISOString(),
-            },
-            {
-              id: 'demo-3',
-              title: 'Midterm exam — Biology',
-              type: 'test',
-              classId: '3',
-              className: 'Biology 201',
-              dueDate: '2026-04-02',
-              submissions: 0,
-              totalStudents: 30,
-              createdAt: new Date().toISOString(),
-            },
-          ]
-        : [],
-    [forms.length],
-  );
-
-  const allQuizzes = useMemo(() => [...quizzes, ...mockQuizzes], [quizzes, mockQuizzes]);
+  const allQuizzes = useMemo(() => quizzes, [quizzes]);
 
   const filteredQuizzes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -242,7 +201,7 @@ const Quizzes: React.FC<Props> = ({ navigation, embedded }) => {
   ];
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={TAB_SAFE_EDGES}>
       <TabScreenHeaderBar navigation={navigation} paddingHorizontal={20}>
         <View>
           <Text style={styles.title}>My Tasks</Text>

@@ -1,22 +1,18 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ClassReminderSettings } from '../types/classReminder';
 import { cancelClassReminderTriggers } from '../services/classReminderNotifications';
+import { api, asList, isUuid, unwrapResource } from '../api/client';
+import { useAuth } from './AuthContext';
 
-/** Institution category collected when creating a class */
 export type SchoolTypeOption = 'School' | 'College' | 'University' | 'Others';
 
-/** Roster entry persisted with a class (from Create Class). */
 export interface ClassStudentRecord {
   id: string;
   name: string;
-  /** Teacher-assigned roll / class number (shown with name in roster views). */
   rollNumber?: string;
   email?: string;
-  /** Private teacher note on the student record (not shown to the student in-app). */
   teacherRemark?: string;
   teacherRemarkUpdatedAt?: string;
-  /** Mark for follow-up / at-risk tracking in the teacher UI. */
   followUp?: boolean;
 }
 
@@ -28,7 +24,6 @@ export interface ClassAnnouncement {
 
 export type ClassActivityKind = 'announcement' | 'attendance' | 'task_assigned';
 
-/** Persisted timeline entries for class detail “Recent activity”. */
 export interface ClassActivityItem {
   id: string;
   kind: ClassActivityKind;
@@ -37,7 +32,6 @@ export interface ClassActivityItem {
   createdAt: string;
 }
 
-/** Saved when attendance is submitted for a calendar day (local YYYY-MM-DD). */
 export type AttendanceEntryStatus = 'present' | 'absent' | 'late';
 
 export interface AttendanceDayEntry {
@@ -47,7 +41,6 @@ export interface AttendanceDayEntry {
 
 export interface AttendanceDayRecord {
   id: string;
-  /** Local calendar date, e.g. 2026-04-09 */
   dateKey: string;
   takenAt: string;
   entries: AttendanceDayEntry[];
@@ -61,18 +54,12 @@ export interface ClassData {
   studentCount: number;
   schedule: string;
   roomNumber?: string;
-  /** Display name of the school / institution */
   schoolName?: string;
   schoolType?: SchoolTypeOption;
-  /** Saved roster; may be absent on older data */
   students?: ClassStudentRecord[];
-  /** Posted class announcements (newest typically shown first in UI). */
   announcements?: ClassAnnouncement[];
-  /** Logged actions: announcements, attendance saves, etc. (newest first in UI). */
   activityLog?: ClassActivityItem[];
-  /** One record per dateKey when attendance is saved; latest save wins for that day. */
   attendanceHistory?: AttendanceDayRecord[];
-  /** Weekly local notification reminder (Notifee). */
   reminder?: ClassReminderSettings;
   createdAt: string;
 }
@@ -82,135 +69,240 @@ interface ClassesContextType {
   addClass: (classData: ClassData) => Promise<void>;
   updateClass: (id: string, updates: Partial<ClassData>) => Promise<void>;
   deleteClass: (id: string) => Promise<void>;
+  refreshClasses: () => Promise<void>;
   isLoading: boolean;
 }
 
 const ClassesContext = createContext<ClassesContextType | undefined>(undefined);
 
+function iso(v: unknown, fallback = ''): string {
+  if (typeof v === 'string') return v;
+  if (v instanceof Date) return v.toISOString();
+  return fallback;
+}
+
+function mapStudent(raw: unknown): ClassStudentRecord {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return {
+    id: String(o.id ?? ''),
+    name: String(o.name ?? ''),
+    rollNumber: typeof o.rollNumber === 'string' ? o.rollNumber : undefined,
+    email: typeof o.email === 'string' ? o.email : undefined,
+    teacherRemark: typeof o.teacherRemark === 'string' ? o.teacherRemark : undefined,
+    teacherRemarkUpdatedAt:
+      typeof o.teacherRemarkUpdatedAt === 'string' ? o.teacherRemarkUpdatedAt : undefined,
+    followUp: Boolean(o.followUp),
+  };
+}
+
+function mapClass(raw: unknown): ClassData {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const students = asList<unknown>(o.students, 'students').map(mapStudent);
+  const reminder = o.reminder && typeof o.reminder === 'object' ? (o.reminder as ClassReminderSettings) : undefined;
+  return {
+    id: String(o.id ?? ''),
+    name: String(o.name ?? ''),
+    subject: String(o.subject ?? ''),
+    gradeLevel: String(o.gradeLevel ?? ''),
+    studentCount: typeof o.studentCount === 'number' ? o.studentCount : students.length,
+    schedule: String(o.schedule ?? ''),
+    roomNumber: typeof o.roomNumber === 'string' ? o.roomNumber : undefined,
+    schoolName: typeof o.schoolName === 'string' ? o.schoolName : undefined,
+    schoolType: o.schoolType as SchoolTypeOption | undefined,
+    students,
+    announcements: asList<ClassAnnouncement>(o.announcements, 'announcements'),
+    activityLog: asList<ClassActivityItem>(o.activityLog, 'activityLog'),
+    attendanceHistory: asList<AttendanceDayRecord>(o.attendanceHistory, 'attendanceHistory'),
+    reminder,
+    createdAt: iso(o.createdAt, new Date().toISOString()),
+  };
+}
+
+async function fetchClasses(): Promise<ClassData[]> {
+  const data = await api.get<unknown>('/classes');
+  const list = asList<unknown>(data, 'classes');
+  const detailed = await Promise.all(
+    list.map(async raw => {
+      const id = String((raw as { id?: unknown }).id ?? '');
+      if (!id) return mapClass(raw);
+      try {
+        const detail = await api.get<unknown>(`/classes/${id}`);
+        return mapClass(unwrapResource(detail, 'class'));
+      } catch {
+        return mapClass(raw);
+      }
+    }),
+  );
+  return detailed;
+}
+
+async function syncRoster(
+  classId: string,
+  prev: ClassStudentRecord[],
+  next: ClassStudentRecord[],
+) {
+  const prevMap = new Map(prev.map(s => [s.id, s]));
+  const nextIds = new Set(next.map(s => s.id));
+  for (const s of prev) {
+    if (!nextIds.has(s.id) && isUuid(s.id)) {
+      await api.del(`/classes/${classId}/students/${s.id}`);
+    }
+  }
+  const toCreate = next.filter(s => !isUuid(s.id) || !prevMap.has(s.id));
+  const rollAssignments: { studentId: string; rollNumber: string }[] = [];
+
+  if (toCreate.length > 1) {
+    await api.post(`/classes/${classId}/students/import`, {
+      students: toCreate.map(s => ({
+        name: s.name,
+        email: s.email,
+        rollNumber: s.rollNumber,
+      })),
+    });
+  } else {
+    for (const s of toCreate) {
+      await api.post(`/classes/${classId}/students`, {
+        name: s.name,
+        email: s.email,
+        rollNumber: s.rollNumber,
+      });
+    }
+  }
+
+  for (const s of next) {
+    if (!isUuid(s.id) || !prevMap.has(s.id)) continue;
+    const old = prevMap.get(s.id);
+    if (!old) continue;
+    const changed =
+      old.name !== s.name ||
+      old.email !== s.email ||
+      old.teacherRemark !== s.teacherRemark ||
+      old.followUp !== s.followUp;
+    if (changed) {
+      await api.patch(`/classes/${classId}/students/${s.id}`, {
+        name: s.name,
+        email: s.email,
+        rollNumber: s.rollNumber,
+        teacherRemark: s.teacherRemark,
+        followUp: s.followUp,
+      });
+    } else if (old.rollNumber !== s.rollNumber && s.rollNumber != null) {
+      rollAssignments.push({ studentId: s.id, rollNumber: s.rollNumber });
+    }
+  }
+  if (rollAssignments.length) {
+    try {
+      await api.post(`/classes/${classId}/students/assign-rolls`, { assignments: rollAssignments });
+    } catch {
+      for (const a of rollAssignments) {
+        await api.patch(`/classes/${classId}/students/${a.studentId}`, { rollNumber: a.rollNumber });
+      }
+    }
+  }
+}
+
 export const ClassesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated } = useAuth();
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadClasses();
+  const refreshClasses = useCallback(async () => {
+    const list = await fetchClasses();
+    setClasses(list);
   }, []);
 
-  const loadClasses = async () => {
-    try {
-      const storedClasses = await AsyncStorage.getItem('classes');
-      if (storedClasses) {
-        setClasses(JSON.parse(storedClasses));
-      } else {
-        // Initialize with some default classes if none exist
-        const defaultClasses: ClassData[] = [
-          {
-            id: '1',
-            name: 'Mathematics 101',
-            subject: 'Mathematics',
-            gradeLevel: 'Grade 10',
-            studentCount: 3,
-            schedule: 'Mon, Wed, Fri - 9:00 AM',
-            roomNumber: 'Room 205',
-            schoolName: 'Westside Academy',
-            schoolType: 'School',
-            students: [
-              { id: 's1', name: 'Alex Morgan', email: 'alex.m@school.edu' },
-              { id: 's2', name: 'Jordan Lee', email: 'jordan.l@school.edu' },
-              { id: 's3', name: 'Sam Rivera', email: 'sam.r@school.edu' },
-            ],
-            activityLog: [
-              {
-                id: 'act-seed-m1',
-                kind: 'announcement',
-                headline: 'Posted an announcement',
-                detail: 'Welcome back — syllabus week is on the portal.',
-                createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-              },
-              {
-                id: 'act-seed-m1-att',
-                kind: 'attendance',
-                headline: 'Attendance marked',
-                detail: '3 present · 0 late · 0 absent',
-                createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-              },
-            ],
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: '2',
-            name: 'English Literature',
-            subject: 'English',
-            gradeLevel: 'Grade 11',
-            studentCount: 2,
-            schedule: 'Tue, Thu - 10:30 AM',
-            roomNumber: 'Room 301',
-            schoolName: 'Westside Academy',
-            schoolType: 'School',
-            students: [
-              { id: 's4', name: 'Casey Kim', email: 'casey.k@school.edu' },
-              { id: 's5', name: 'Riley Chen', email: 'riley.c@school.edu' },
-            ],
-            activityLog: [
-              {
-                id: 'act-seed-e1',
-                kind: 'announcement',
-                headline: 'Posted an announcement',
-                detail: 'Reading circle meets Thursdays after school.',
-                createdAt: new Date(Date.now() - 86400000).toISOString(),
-              },
-            ],
-            createdAt: new Date().toISOString(),
-          },
-        ];
-        setClasses(defaultClasses);
-        await AsyncStorage.setItem('classes', JSON.stringify(defaultClasses));
-      }
-    } catch (error) {
-      console.error('Error loading classes:', error);
-    } finally {
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setClasses([]);
       setIsLoading(false);
+      return;
     }
-  };
+    let cancelled = false;
+    setIsLoading(true);
+    fetchClasses()
+      .then(list => {
+        if (!cancelled) setClasses(list);
+      })
+      .catch(() => {
+        if (!cancelled) setClasses([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
 
   const addClass = async (classData: ClassData) => {
-    try {
-      const updatedClasses = [classData, ...classes];
-      setClasses(updatedClasses);
-      await AsyncStorage.setItem('classes', JSON.stringify(updatedClasses));
-    } catch (error) {
-      console.error('Error saving class:', error);
-    }
+    await api.post('/classes', {
+      name: classData.name,
+      subject: classData.subject,
+      gradeLevel: classData.gradeLevel,
+      schedule: classData.schedule,
+      roomNumber: classData.roomNumber,
+      schoolName: classData.schoolName,
+      schoolType: classData.schoolType,
+      students: (classData.students ?? []).map(s => ({
+        name: s.name,
+        email: s.email,
+        rollNumber: s.rollNumber,
+      })),
+    });
+    await refreshClasses();
   };
 
   const updateClass = async (id: string, updates: Partial<ClassData>) => {
+    const prev = classes.find(c => c.id === id);
+    setClasses(list => list.map(c => (c.id === id ? { ...c, ...updates } : c)));
     try {
-      const updatedClasses = classes.map(cls => 
-        cls.id === id ? { ...cls, ...updates } : cls
+      if (updates.announcements && prev) {
+        const oldIds = new Set((prev.announcements ?? []).map(a => a.id));
+        const added = (updates.announcements ?? []).filter(a => !oldIds.has(a.id));
+        for (const a of added) {
+          await api.post(`/classes/${id}/announcements`, { body: a.body });
+        }
+      }
+      if (updates.attendanceHistory?.[0]) {
+        const day = updates.attendanceHistory[0];
+        await api.put(`/classes/${id}/attendance/${day.dateKey}`, { entries: day.entries });
+      }
+      if (updates.students) {
+        await syncRoster(id, prev?.students ?? [], updates.students);
+      }
+      const meta: Record<string, unknown> = {};
+      (['name', 'subject', 'gradeLevel', 'schedule', 'roomNumber', 'schoolName', 'schoolType'] as const).forEach(
+        k => {
+          if (k in updates) meta[k] = updates[k];
+        },
       );
-      setClasses(updatedClasses);
-      await AsyncStorage.setItem('classes', JSON.stringify(updatedClasses));
-    } catch (error) {
-      console.error('Error updating class:', error);
+      if (updates.reminder) meta.reminder = updates.reminder;
+      if (Object.keys(meta).length) await api.patch(`/classes/${id}`, meta);
+      await refreshClasses();
+    } catch (e) {
+      try {
+        await refreshClasses();
+      } catch {
+        /* ignore */
+      }
+      throw e;
     }
   };
 
   const deleteClass = async (id: string) => {
     try {
-      try {
-        await cancelClassReminderTriggers(id);
-      } catch (e) {
-        if (__DEV__) console.warn('cancelClassReminderTriggers', e);
-      }
-      const updatedClasses = classes.filter(cls => cls.id !== id);
-      setClasses(updatedClasses);
-      await AsyncStorage.setItem('classes', JSON.stringify(updatedClasses));
-    } catch (error) {
-      console.error('Error deleting class:', error);
+      await cancelClassReminderTriggers(id);
+    } catch (e) {
+      if (__DEV__) console.warn('cancelClassReminderTriggers', e);
     }
+    await api.del(`/classes/${id}`);
+    setClasses(list => list.filter(c => c.id !== id));
   };
 
   return (
-    <ClassesContext.Provider value={{ classes, addClass, updateClass, deleteClass, isLoading }}>
+    <ClassesContext.Provider
+      value={{ classes, addClass, updateClass, deleteClass, refreshClasses, isLoading }}
+    >
       {children}
     </ClassesContext.Provider>
   );
@@ -223,5 +315,3 @@ export const useClasses = () => {
   }
   return context;
 };
-
-

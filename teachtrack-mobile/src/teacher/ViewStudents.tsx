@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { STACK_SAFE_EDGES } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import { useClasses, type ClassStudentRecord } from '../context/ClassesContext';
@@ -384,7 +385,7 @@ const ViewStudents: React.FC<Props> = ({ route, navigation }) => {
 
   if (!classData) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
         <View style={styles.header}>
           <BackButton onPress={() => navigation.goBack()} />
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -400,7 +401,7 @@ const ViewStudents: React.FC<Props> = ({ route, navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle} numberOfLines={1}>

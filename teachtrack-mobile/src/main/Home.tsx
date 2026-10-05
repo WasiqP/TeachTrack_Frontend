@@ -12,11 +12,11 @@ import {
   LayoutAnimation,
   UIManager,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import type { MainTabRoute, RootStackParamList } from '../types/navigation';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, useLayout, useThemeMode } from '../theme';
+import AppScreen from '../components/AppScreen';
 import Svg, { Path, Circle } from 'react-native-svg';
 import BottomTab from '../components/BottomTab';
 import { PulseScrollView } from '../components/PulseScrollView';
@@ -44,7 +44,6 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const PAGE_H = 20;
 const R_CARD = radius.card;
 
 /** Relative time for activity rows (short, locale-friendly). */
@@ -361,6 +360,7 @@ const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => 
   const { firstName, displayName } = useUser();
   const { showAlert, showSuccess } = usePulseAlert();
   const { ink, theme } = useThemeMode();
+  const layout = useLayout();
 
   const [announcementDraft, setAnnouncementDraft] = useState('');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -657,7 +657,7 @@ const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => 
   /** Right column: top row = profile + settings; greeting row = megaphone aligned to same trailing edge. */
   headerRightColumn: {
     alignItems: 'flex-end',
-    minWidth: 96,
+    minWidth: layout.compact ? 56 : 96,
   },
   headerIconsRow: {
     flexDirection: 'row',
@@ -693,8 +693,8 @@ const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => 
   greetingDisplay: {
     flex: 1,
     minWidth: 0,
-    fontSize: 40,
-    lineHeight: 44,
+    fontSize: layout.fs(40),
+    lineHeight: layout.fs(44),
     fontFamily: F.outfitBlack,
     color: INK,
     letterSpacing: -1,
@@ -713,11 +713,11 @@ const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => 
     opacity: 0.9,
   },
   tagline: {
-    fontSize: 17,
-    lineHeight: 24,
+    fontSize: layout.fs(17),
+    lineHeight: layout.fs(24),
     fontFamily: F.dmMedium,
     color: INK_SOFT,
-    marginBottom: 22,
+    marginBottom: layout.short ? 16 : 22,
   },
   recentActivityShell: {
     marginBottom: 12,
@@ -1329,11 +1329,11 @@ const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => 
     height: 8,
   },
 }),
-    [ink, theme],
+    [ink, theme, layout],
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <AppScreen style={styles.safe} withTabBar>
       <View style={styles.root}>
         <PulseScrollView
           style={styles.scroll}
@@ -1341,7 +1341,7 @@ const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => 
           showsVerticalScrollIndicator={false}
           removeClippedSubviews={Platform.OS === 'android'}
         >
-          <View style={[styles.page, { paddingHorizontal: PAGE_H }]}>
+          <View style={[styles.page, { paddingHorizontal: layout.gutter }]}>
             <Animated.View
               style={{
                 opacity: homeSegOpacity[0],
@@ -1378,7 +1378,7 @@ const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => 
                   </View>
                 </View>
                 <View style={styles.headerRowGreeting}>
-                  <Text style={styles.greetingDisplay} numberOfLines={2}>
+                  <Text style={styles.greetingDisplay} numberOfLines={2} maxFontSizeMultiplier={1.25}>
                     {heyLine}
                   </Text>
                   <View style={styles.headerRightColumn}>
@@ -1935,7 +1935,7 @@ const Home: React.FC<Props> = ({ navigation, embedded, onSelectTab, route }) => 
 
         {!embedded && <BottomTab navigation={navigation} currentRoute="Home" />}
       </View>
-    </SafeAreaView>
+    </AppScreen>
   );
 };
 

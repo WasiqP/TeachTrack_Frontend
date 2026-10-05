@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import BackButton from './Reusable-Components/BackButton';
-import { useThemeMode } from '../theme';
+import { useLayout, useThemeMode } from '../theme';
 
 /** Minimal navigation shape for back affordance on tab-root screens */
 export type TabHeaderNavigation = {
@@ -28,11 +28,14 @@ export default function TabScreenHeaderBar({
   navigation,
   children,
   right,
-  paddingTop = DEFAULT_PADDING_TOP,
-  paddingHorizontal = 20,
+  paddingTop,
+  paddingHorizontal,
   style,
 }: Props) {
   const { ink } = useThemeMode();
+  const layout = useLayout();
+  const resolvedPadH = paddingHorizontal ?? layout.gutter;
+  const resolvedPadTop = paddingTop ?? (layout.short ? 12 : DEFAULT_PADDING_TOP);
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -67,7 +70,7 @@ export default function TabScreenHeaderBar({
 
   const canBack = navigation.canGoBack();
   return (
-    <View style={[styles.wrap, { paddingTop, paddingHorizontal }, style]}>
+    <View style={[styles.wrap, { paddingTop: resolvedPadTop, paddingHorizontal: resolvedPadH }, style]}>
       <View style={styles.row}>
         <BackButton
           onPress={() => {

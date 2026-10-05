@@ -14,10 +14,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import { PulseScrollView } from '../components/PulseScrollView';
-import { useUser } from '../context/UserContext';
+import { useAuth } from '../context/AuthContext';
 import { usePulseAlert } from '../context/AlertModalContext';
 import { enterMainApp } from '../navigation/enterMainApp';
 
@@ -29,8 +29,8 @@ const CELL = 48;
 
 const VerifyOtp: React.FC<Props> = ({ navigation, route }) => {
   const { ink, theme } = useThemeMode();
-  const { email, purpose, name } = route.params;
-  const { setDisplayName } = useUser();
+  const { email, purpose, name: _name } = route.params;
+  const { verifyOtp, resendOtp } = useAuth();
   const { showAlert, showSuccess } = usePulseAlert();
 
   const [digits, setDigits] = useState<string[]>(() => Array(OTP_LENGTH).fill(''));
@@ -87,42 +87,51 @@ const VerifyOtp: React.FC<Props> = ({ navigation, route }) => {
       return;
     }
 
-    // Demo: accept any 6-digit code; replace with API check later.
-    const mockValid = /^\d{6}$/.test(code);
-    if (!mockValid) {
+    try {
+      const result = await verifyOtp(email, code, purpose);
+      if (purpose === 'signup') {
+        showSuccess('You’re verified', 'Welcome to TeachTrack.', () => {
+          enterMainApp(navigation);
+        });
+        return;
+      }
+      if (!result.resetToken) {
+        showAlert({
+          variant: 'error',
+          title: 'Couldn’t continue',
+          message: 'No reset token was returned. Request a new code and try again.',
+        });
+        return;
+      }
+      navigation.replace('ResetPassword', { resetToken: result.resetToken });
+    } catch (err) {
       showAlert({
         variant: 'error',
         title: 'Invalid code',
-        message: 'Please check the code and try again.',
+        message: err instanceof Error ? err.message : 'Please check the code and try again.',
       });
-      return;
     }
-
-    if (purpose === 'signup') {
-      if (name?.trim()) {
-        await setDisplayName(name.trim());
-      }
-      showSuccess('You’re verified', 'Welcome to TeachTrack.', () => {
-        enterMainApp(navigation);
-      });
-      return;
-    }
-
-    showSuccess('Email verified', 'Return to log in and use your password.', () => {
-      navigation.replace('Login');
-    });
   };
 
-  const handleResend = () => {
+  const handleResend = async () => {
     if (resendIn > 0) return;
-    setResendIn(RESEND_SECONDS);
-    setDigits(Array(OTP_LENGTH).fill(''));
-    focusIndex(0);
-    showAlert({
-      variant: 'info',
-      title: 'Code sent',
-      message: `We sent a new code to ${email}.`,
-    });
+    try {
+      await resendOtp(email, purpose);
+      setResendIn(RESEND_SECONDS);
+      setDigits(Array(OTP_LENGTH).fill(''));
+      focusIndex(0);
+      showAlert({
+        variant: 'info',
+        title: 'Code sent',
+        message: `We sent a new code to ${email}. Check the API console in local development.`,
+      });
+    } catch (err) {
+      showAlert({
+        variant: 'error',
+        title: 'Couldn’t resend',
+        message: err instanceof Error ? err.message : 'Try again in a moment.',
+      });
+    }
   };
 
   const title = purpose === 'signup' ? 'Verify your email' : 'Enter verification code';
@@ -278,7 +287,7 @@ const VerifyOtp: React.FC<Props> = ({ navigation, route }) => {
   );
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

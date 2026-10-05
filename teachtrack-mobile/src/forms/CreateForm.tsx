@@ -14,7 +14,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import FormIcon from '../components/FormIcons';
 import { useForms, type FormData } from '../context/FormsContext';
@@ -116,11 +116,10 @@ const CreateForm: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    const id = `${Date.now()}`;
     const cls = classId === 'all' ? null : classes.find((c) => c.id === classId);
 
     const formData: FormData = {
-      id,
+      id: '',
       name,
       iconId,
       createdAt: new Date().toISOString(),
@@ -136,8 +135,16 @@ const CreateForm: React.FC<Props> = ({ navigation }) => {
       },
     };
 
-    await addForm(formData);
-    navigation.replace('EditForm', { formId: id });
+    try {
+      const created = await addForm(formData);
+      navigation.replace('EditForm', { formId: created.id });
+    } catch (err) {
+      showAlert({
+        title: 'Couldn’t create task',
+        message: err instanceof Error ? err.message : 'Check that the API is running and try again.',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+    }
   }, [
     classes,
     classId,
@@ -407,7 +414,7 @@ const CreateForm: React.FC<Props> = ({ navigation }) => {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={STACK_SAFE_EDGES}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

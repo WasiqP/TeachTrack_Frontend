@@ -17,7 +17,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../types/navigation';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useThemeMode } from '../theme';
 import { useForms } from '../context/FormsContext';
 import BackButton from '../components/Reusable-Components/BackButton';
 import { PulseScrollView } from '../components/PulseScrollView';
@@ -576,7 +576,7 @@ const SwapQuestionsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   if (!form) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={STACK_SAFE_EDGES}>
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>Task not found</Text>
           <BackButton onPress={() => navigation.goBack()} stroke={ink.ink} rippleColor={theme.rippleLight} />
@@ -586,7 +586,7 @@ const SwapQuestionsScreen: React.FC<Props> = ({ route, navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={STACK_SAFE_EDGES}>
       <PulseScrollView
         ref={(r) => {
           scrollRef.current = r;

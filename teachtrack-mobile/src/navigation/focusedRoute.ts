@@ -10,6 +10,7 @@ const AUTH_FLOW_ROUTE_NAMES = new Set<string>([
   'SignUp',
   'ForgotPassword',
   'VerifyOtp',
+  'ResetPassword',
 ]);
 
 export function isAuthFlowRoute(name: string | undefined): boolean {

@@ -9,7 +9,7 @@ import {
   type TaskKind,
   type TaskGradeRecord,
 } from '../context/GradesTasksContext';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import { PulseScrollView } from '../components/PulseScrollView';
 import Svg, { Path } from 'react-native-svg';
@@ -686,7 +686,7 @@ const TaskGradeReport: React.FC<Props> = ({ navigation, route }) => {
   );
   if (!classData || !task) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
         <View style={styles.header}>
           <BackButton onPress={() => navigation.goBack()} />
           <Text style={styles.headerTitle}>Grade report</Text>
@@ -704,7 +704,7 @@ const TaskGradeReport: React.FC<Props> = ({ navigation, route }) => {
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle} numberOfLines={1}>

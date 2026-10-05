@@ -5,7 +5,7 @@ import {
   StyleSheet,
   Pressable,
   TextInput,
-  Dimensions,
+  useWindowDimensions,
   Share as RNShare,
   Linking,
   ActivityIndicator,
@@ -19,7 +19,7 @@ import type { RootStackParamList } from '../types/navigation';
 import { useForms } from '../context/FormsContext';
 import { useClasses } from '../context/ClassesContext';
 import { useGradesTasks, type TaskKind } from '../context/GradesTasksContext';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import FormIcon from '../components/FormIcons';
 import ShareIcon from '../../assets/images/share.svg';
@@ -33,10 +33,9 @@ import { PulseScrollView } from '../components/PulseScrollView';
 import { usePulseAlert } from '../context/AlertModalContext';
 import Svg, { Path } from 'react-native-svg';
 import { useFocusEffect } from '@react-navigation/native';
+import { STUDENT_FORM_BASE } from '../config/api';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ShareTask'>;
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const KIND_LABEL: Record<TaskKind, string> = {
   quiz: 'Quiz',
@@ -98,9 +97,10 @@ const TABS = [
 
 const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
   const { ink, theme, isDark } = useThemeMode();
+  const { width: windowWidth } = useWindowDimensions();
   const { formId } = route.params;
   const { forms } = useForms();
-  const { classes, updateClass } = useClasses();
+  const { classes } = useClasses();
   const { assignFormToClasses } = useGradesTasks();
   const { showSuccess, showError } = usePulseAlert();
   const form = forms.find((f) => f.id === formId);
@@ -113,7 +113,7 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
   const exitTranslate = useRef(new Animated.Value(0)).current;
   const exitScale = useRef(new Animated.Value(1)).current;
 
-  const formLink = form ? `https://pulsebox.app/form/${formId}` : '';
+  const formLink = form ? form.shareUrl || `${STUDENT_FORM_BASE}/${formId}` : '';
 
   const taskKind = useMemo(
     () => mapFormKindToTaskKind(form?.answers?.taskKind ?? form?.answers?.assessmentType),
@@ -674,22 +674,6 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
         targets,
       });
 
-      for (const c of sortedClasses) {
-        if (!selectedClassIds.has(c.id)) continue;
-        await updateClass(c.id, {
-          activityLog: [
-            {
-              id: `act-task-${form.id}-${c.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              kind: 'task_assigned',
-              headline: `Task assigned: ${form.name}`,
-              detail: 'Students can open the shared link or see this task in View grades.',
-              createdAt: new Date().toISOString(),
-            },
-            ...(c.activityLog ?? []),
-          ],
-        });
-      }
-
       const n = selectedClassIds.size;
       setAssigning(false);
       showSuccess(
@@ -734,7 +718,7 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
 
   if (!form) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
         <View style={styles.header}>
           <BackButton onPress={() => navigation.goBack()} />
           <Text style={styles.headerTitle}>Share task</Text>
@@ -757,7 +741,7 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
     );
   }
 
-  const qrSize = Math.min(220, SCREEN_WIDTH - 120);
+  const qrSize = Math.min(220, Math.max(160, windowWidth - 120));
 
   const exitAnimStyle = {
     opacity: exitOpacity,
@@ -765,7 +749,7 @@ const ShareTaskScreen: React.FC<Props> = ({ route, navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <Animated.View style={[styles.exitLayer, exitAnimStyle]}>
         <View style={styles.header}>
           <BackButton onPress={() => navigation.goBack()} />

@@ -12,16 +12,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useLayout, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import { PulseScrollView } from '../components/PulseScrollView';
+import { useAuth } from '../context/AuthContext';
+import { usePulseAlert } from '../context/AlertModalContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ForgotPassword'>;
 
 const ForgotPassword: React.FC<Props> = ({ navigation, route }) => {
   const { ink, theme } = useThemeMode();
+  const layout = useLayout();
   const initialEmail = route.params?.email ?? '';
   const [email, setEmail] = useState(initialEmail);
+  const [busy, setBusy] = useState(false);
+  const { forgotPassword } = useAuth();
+  const { showAlert } = usePulseAlert();
 
   const styles = useMemo(
     () =>
@@ -36,10 +42,10 @@ const ForgotPassword: React.FC<Props> = ({ navigation, route }) => {
           marginBottom: 2,
         },
         scrollContent: {
-          paddingHorizontal: 28,
+          paddingHorizontal: layout.authGutter,
           paddingTop: 0,
           paddingBottom: 24,
-          maxWidth: 480,
+          maxWidth: layout.contentMax,
           width: '100%',
           alignSelf: 'center',
         },
@@ -124,7 +130,7 @@ const ForgotPassword: React.FC<Props> = ({ navigation, route }) => {
           fontFamily: F.outfitBold,
         },
       }),
-    [ink, theme],
+    [ink, theme, layout],
   );
 
   const handleBack = () => {
@@ -132,17 +138,29 @@ const ForgotPassword: React.FC<Props> = ({ navigation, route }) => {
     else navigation.navigate('Login');
   };
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     const trimmed = email.trim();
     if (!trimmed) return;
-    navigation.navigate('VerifyOtp', {
-      email: trimmed,
-      purpose: 'reset',
-    });
+    setBusy(true);
+    try {
+      await forgotPassword(trimmed);
+      navigation.navigate('VerifyOtp', {
+        email: trimmed,
+        purpose: 'reset',
+      });
+    } catch (err) {
+      showAlert({
+        variant: 'error',
+        title: 'Couldn’t send code',
+        message: err instanceof Error ? err.message : 'Check the email and try again.',
+      });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -184,9 +202,9 @@ const ForgotPassword: React.FC<Props> = ({ navigation, route }) => {
             />
 
             <Pressable
-              style={[styles.primaryBtn, !email.trim() && styles.primaryBtnDisabled]}
+              style={[styles.primaryBtn, (!email.trim() || busy) && styles.primaryBtnDisabled]}
               android_ripple={{ color: theme.rippleLight }}
-              disabled={!email.trim()}
+              disabled={!email.trim() || busy}
               onPress={handleSendCode}
             >
               <Text style={styles.primaryLabel}>Send verification code</Text>

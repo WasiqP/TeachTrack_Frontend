@@ -5,9 +5,10 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import BottomTab from '../components/BottomTab';
 import TabScreenHeaderBar from '../components/TabScreenHeaderBar';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, TAB_SAFE_EDGES, useLayout, useThemeMode } from '../theme';
 import { languageLabel, useAppSettings } from '../context/AppSettingsContext';
 import { usePulseAlert } from '../context/AlertModalContext';
+import { useAuth } from '../context/AuthContext';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const packageJson = require('../../package.json') as { version: string };
@@ -19,8 +20,10 @@ type Props = {
 
 const Settings: React.FC<Props> = ({ navigation, embedded }) => {
   const { ink, theme, scheme, toggleScheme, isDark } = useThemeMode();
+  const layout = useLayout();
   const { language } = useAppSettings();
   const { showAlert } = usePulseAlert();
+  const { logout } = useAuth();
   const appVersion = packageJson.version ?? '0.0.1';
 
   const confirmLogout = useCallback(() => {
@@ -34,15 +37,12 @@ const Settings: React.FC<Props> = ({ navigation, embedded }) => {
           text: 'Log out',
           style: 'destructive',
           onPress: () => {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'GetStarted' }],
-            });
+            void logout();
           },
         },
       ],
     });
-  }, [navigation, showAlert]);
+  }, [logout, showAlert]);
 
   const styles = useMemo(
     () =>
@@ -72,7 +72,7 @@ const Settings: React.FC<Props> = ({ navigation, embedded }) => {
           marginBottom: 0,
         },
         scrollContent: {
-          paddingHorizontal: 24,
+          paddingHorizontal: layout.gutter + 4,
           paddingTop: 24,
           paddingBottom: 100,
         },
@@ -127,11 +127,11 @@ const Settings: React.FC<Props> = ({ navigation, embedded }) => {
           color: theme.white,
         },
       }),
-    [ink, theme],
+    [ink, theme, layout],
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={TAB_SAFE_EDGES}>
       <View style={styles.content}>
         <TabScreenHeaderBar navigation={navigation} paddingHorizontal={24}>
           <View>

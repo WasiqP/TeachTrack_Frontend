@@ -11,6 +11,7 @@ export type RootStackParamList = {
   ForgotPassword: { email?: string } | undefined;
   /** After signup or forgot-password, verify the email with a 6-digit code. */
   VerifyOtp: { email: string; purpose: 'signup' | 'reset'; name?: string };
+  ResetPassword: { resetToken: string };
   /**
    * Main teacher shell: tab panels swap in place (see `TeacherTabShell`).
    * Use `tab` when returning from another screen to open a specific tab.

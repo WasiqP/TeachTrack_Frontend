@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { api, asList, unwrapResource } from '../api/client';
+import { STUDENT_FORM_BASE } from '../config/api';
+import { useAuth } from './AuthContext';
 
 export interface FormData {
   id: string;
@@ -7,11 +9,12 @@ export interface FormData {
   iconId: string;
   answers: any;
   createdAt: string;
+  shareUrl?: string;
 }
 
 interface FormsContextType {
   forms: FormData[];
-  addForm: (form: FormData) => Promise<void>;
+  addForm: (form: FormData) => Promise<FormData>;
   updateForm: (id: string, updates: Partial<FormData>) => Promise<void>;
   deleteForm: (id: string) => Promise<void>;
   isLoading: boolean;
@@ -19,57 +22,72 @@ interface FormsContextType {
 
 const FormsContext = createContext<FormsContextType | undefined>(undefined);
 
+function mapForm(raw: unknown): FormData {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const id = String(o.id ?? '');
+  return {
+    id,
+    name: String(o.name ?? ''),
+    iconId: String(o.iconId ?? 'clipboard'),
+    answers: o.answers ?? {},
+    createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date().toISOString(),
+    shareUrl: typeof o.shareUrl === 'string' ? o.shareUrl : id ? `${STUDENT_FORM_BASE}/${id}` : undefined,
+  };
+}
+
 export const FormsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated } = useAuth();
   const [forms, setForms] = useState<FormData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadForms();
+  const load = useCallback(async () => {
+    const data = await api.get<unknown>('/forms');
+    setForms(asList<unknown>(data, 'forms').map(mapForm));
   }, []);
 
-  const loadForms = async () => {
-    try {
-      const storedForms = await AsyncStorage.getItem('forms');
-      if (storedForms) {
-        setForms(JSON.parse(storedForms));
-      }
-    } catch (error) {
-      console.error('Error loading forms:', error);
-    } finally {
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setForms([]);
       setIsLoading(false);
+      return;
     }
-  };
+    let cancelled = false;
+    setIsLoading(true);
+    load()
+      .catch(() => {
+        if (!cancelled) setForms([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, load]);
 
-  const addForm = async (form: FormData) => {
-    try {
-      const updatedForms = [form, ...forms];
-      setForms(updatedForms);
-      await AsyncStorage.setItem('forms', JSON.stringify(updatedForms));
-    } catch (error) {
-      console.error('Error saving form:', error);
-    }
+  const addForm = async (form: FormData): Promise<FormData> => {
+    const data = await api.post<unknown>('/forms', {
+      name: form.name,
+      iconId: form.iconId,
+      answers: form.answers,
+    });
+    const created = mapForm(unwrapResource(data, 'form'));
+    setForms(prev => [created, ...prev.filter(f => f.id !== created.id)]);
+    return created;
   };
 
   const updateForm = async (id: string, updates: Partial<FormData>) => {
-    try {
-      const updatedForms = forms.map(form => 
-        form.id === id ? { ...form, ...updates } : form
-      );
-      setForms(updatedForms);
-      await AsyncStorage.setItem('forms', JSON.stringify(updatedForms));
-    } catch (error) {
-      console.error('Error updating form:', error);
-    }
+    setForms(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
+    const payload: Record<string, unknown> = {};
+    if (updates.name != null) payload.name = updates.name;
+    if (updates.iconId != null) payload.iconId = updates.iconId;
+    if (updates.answers != null) payload.answers = updates.answers;
+    if (Object.keys(payload).length) await api.patch(`/forms/${id}`, payload);
   };
 
   const deleteForm = async (id: string) => {
-    try {
-      const updatedForms = forms.filter(form => form.id !== id);
-      setForms(updatedForms);
-      await AsyncStorage.setItem('forms', JSON.stringify(updatedForms));
-    } catch (error) {
-      console.error('Error deleting form:', error);
-    }
+    await api.del(`/forms/${id}`);
+    setForms(prev => prev.filter(f => f.id !== id));
   };
 
   return (
@@ -86,4 +104,3 @@ export const useForms = () => {
   }
   return context;
 };
-

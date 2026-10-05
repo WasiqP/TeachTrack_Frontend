@@ -1,27 +1,51 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  Image,
+  Platform,
+  KeyboardAvoidingView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useLayout, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import { enterMainApp } from '../navigation/enterMainApp';
+import { PulseScrollView } from '../components/PulseScrollView';
+import { useAuth } from '../context/AuthContext';
+import { ApiError } from '../api/client';
+import { usePulseAlert } from '../context/AlertModalContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const Login: React.FC<Props> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
   const { ink, theme } = useThemeMode();
+  const { login } = useAuth();
+  const { showAlert } = usePulseAlert();
+  const layout = useLayout();
 
   const styles = useMemo(
     () =>
       StyleSheet.create({
+        flex: { flex: 1 },
         screen: {
           flex: 1,
           backgroundColor: ink.canvas,
-          paddingHorizontal: 28,
+        },
+        scrollContent: {
+          paddingHorizontal: layout.authGutter,
           paddingTop: 0,
+          paddingBottom: 18,
+          maxWidth: layout.contentMax,
+          width: '100%',
+          alignSelf: 'center',
         },
         backBtn: {
           alignSelf: 'flex-start',
@@ -29,14 +53,17 @@ const Login: React.FC<Props> = ({ navigation }) => {
         },
         brandRow: {
           alignItems: 'center',
-          marginTop: -8,
+          marginTop: layout.short ? -4 : -8,
           marginBottom: 4,
         },
-        logo: { width: 172, height: 146, maxWidth: '100%' },
-        content: { flex: 1 },
+        logo: {
+          width: layout.compact ? 132 : 172,
+          height: layout.compact ? 112 : 146,
+          maxWidth: '100%',
+        },
         heading: {
-          fontSize: 36,
-          lineHeight: 40,
+          fontSize: layout.fs(36),
+          lineHeight: layout.fs(40),
           fontFamily: F.outfitBlack,
           color: ink.ink,
           marginTop: 4,
@@ -44,11 +71,11 @@ const Login: React.FC<Props> = ({ navigation }) => {
           letterSpacing: -0.8,
         },
         subtitle: {
-          fontSize: 16,
-          lineHeight: 24,
+          fontSize: layout.fs(16),
+          lineHeight: layout.fs(24),
           fontFamily: F.dmRegular,
           color: ink.inkSoft,
-          marginBottom: 22,
+          marginBottom: layout.short ? 14 : 22,
           maxWidth: 360,
         },
         input: {
@@ -57,7 +84,7 @@ const Login: React.FC<Props> = ({ navigation }) => {
           borderColor: ink.borderInk,
           borderRadius: radius.input,
           paddingHorizontal: 16,
-          paddingVertical: 14,
+          paddingVertical: Platform.OS === 'ios' ? 14 : 12,
           fontSize: 15,
           fontFamily: F.dmRegular,
           color: ink.ink,
@@ -73,6 +100,8 @@ const Login: React.FC<Props> = ({ navigation }) => {
           paddingVertical: 16,
           borderRadius: radius.btn,
           alignItems: 'center',
+          minHeight: layout.minTap + 8,
+          justifyContent: 'center',
         },
         primaryLabel: {
           color: theme.white,
@@ -108,7 +137,8 @@ const Login: React.FC<Props> = ({ navigation }) => {
         },
         socialBtn: {
           backgroundColor: ink.borderInk,
-          width: 110,
+          flex: 1,
+          maxWidth: 140,
           paddingVertical: 14,
           borderRadius: radius.btn,
           alignItems: 'center',
@@ -125,8 +155,38 @@ const Login: React.FC<Props> = ({ navigation }) => {
           fontFamily: F.outfitBold,
         },
       }),
-    [ink, theme],
+    [ink, theme, layout],
   );
+
+  const handleLogin = async () => {
+    const e = email.trim();
+    if (!e || !password) {
+      showAlert({
+        variant: 'warning',
+        title: 'Missing information',
+        message: 'Enter your email and password.',
+      });
+      return;
+    }
+    setBusy(true);
+    try {
+      await login(e, password);
+      enterMainApp(navigation);
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : '';
+      if (code === 'EMAIL_NOT_VERIFIED') {
+        navigation.navigate('VerifyOtp', { email: e, purpose: 'signup' });
+        return;
+      }
+      showAlert({
+        variant: 'error',
+        title: 'Couldn’t sign in',
+        message: err instanceof Error ? err.message : 'Check your email and password.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleBack = () => {
     if (navigation.canGoBack()) {
@@ -137,64 +197,80 @@ const Login: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
-      <BackButton onPress={handleBack} style={styles.backBtn} />
-      <View style={styles.brandRow}>
-        <Image
-          source={require('../../assets/images/logo-transparent.png')}
-          style={styles.logo}
-          resizeMode="contain"
-          accessibilityLabel="App logo"
-        />
-      </View>
-      <View style={styles.content}>
-        <Text style={styles.heading}>Welcome back</Text>
-        <Text style={styles.subtitle}>
-          Sign in to access your classes, quizzes, and attendance in one place.
-        </Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          placeholder="Enter your email"
-          placeholderTextColor={ink.inkSoft}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          style={[styles.input, styles.inputFirst]}
-        />
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Enter your password"
-          placeholderTextColor={ink.inkSoft}
-          secureTextEntry
-          style={styles.input}
-        />
-        <Pressable
-          style={styles.primaryBtn}
-          android_ripple={{ color: theme.rippleLight }}
-          onPress={() => enterMainApp(navigation)}
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <PulseScrollView
+          customTrack={false}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
         >
-          <Text style={styles.primaryLabel}>Log In</Text>
-        </Pressable>
-        <Pressable onPress={() => navigation.navigate('ForgotPassword')} hitSlop={8}>
-          <Text style={styles.forgot}>Forgot password?</Text>
-        </Pressable>
-        <Pressable onPress={() => navigation.navigate('SignUp')} hitSlop={8}>
-          <Text style={styles.alt}>
-            {"Don't have an account? "}
-            <Text style={styles.altLink}>Sign Up</Text>
+          <BackButton onPress={handleBack} style={styles.backBtn} />
+          <View style={styles.brandRow}>
+            <Image
+              source={require('../../assets/images/logo-transparent.png')}
+              style={styles.logo}
+              resizeMode="contain"
+              accessibilityLabel="App logo"
+            />
+          </View>
+          <Text style={styles.heading} maxFontSizeMultiplier={1.2}>
+            Welcome back
           </Text>
-        </Pressable>
-        <Text style={styles.socialHint}>Log in with socials</Text>
-        <View style={styles.socialRow}>
-          <Pressable style={styles.socialBtn} android_ripple={{ color: 'rgba(255,255,255,0.15)' }}>
-            <Text style={styles.socialText}>G</Text>
+          <Text style={styles.subtitle}>
+            Sign in to access your classes, quizzes, and attendance in one place.
+          </Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            placeholder="Enter your email"
+            placeholderTextColor={ink.inkSoft}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            style={[styles.input, styles.inputFirst]}
+            maxFontSizeMultiplier={1.3}
+          />
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Enter your password"
+            placeholderTextColor={ink.inkSoft}
+            secureTextEntry
+            style={styles.input}
+            maxFontSizeMultiplier={1.3}
+          />
+          <Pressable
+            style={[styles.primaryBtn, busy && { opacity: 0.55 }]}
+            android_ripple={{ color: theme.rippleLight }}
+            disabled={busy}
+            onPress={handleLogin}
+          >
+            <Text style={styles.primaryLabel}>{busy ? 'Signing in…' : 'Log In'}</Text>
           </Pressable>
-          <Pressable style={styles.socialBtn} android_ripple={{ color: 'rgba(255,255,255,0.15)' }}>
-            <Text style={styles.socialText}>f</Text>
+          <Pressable onPress={() => navigation.navigate('ForgotPassword')} hitSlop={8}>
+            <Text style={styles.forgot}>Forgot password?</Text>
           </Pressable>
-        </View>
-      </View>
+          <Pressable onPress={() => navigation.navigate('SignUp')} hitSlop={8}>
+            <Text style={styles.alt}>
+              {"Don't have an account? "}
+              <Text style={styles.altLink}>Sign Up</Text>
+            </Text>
+          </Pressable>
+          <Text style={styles.socialHint}>Log in with socials</Text>
+          <View style={styles.socialRow}>
+            <Pressable style={styles.socialBtn} android_ripple={{ color: 'rgba(255,255,255,0.15)' }}>
+              <Text style={styles.socialText}>G</Text>
+            </Pressable>
+            <Pressable style={styles.socialBtn} android_ripple={{ color: 'rgba(255,255,255,0.15)' }}>
+              <Text style={styles.socialText}>f</Text>
+            </Pressable>
+          </View>
+        </PulseScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

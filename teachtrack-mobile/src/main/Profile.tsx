@@ -17,7 +17,7 @@ import {
 } from 'react-native-image-picker';
 import Svg, { Path, Circle } from 'react-native-svg';
 import type { RootStackParamList } from '../types/navigation';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useThemeMode } from '../theme';
 import { useUser } from '../context/UserContext';
 import { useClasses } from '../context/ClassesContext';
 import { useGradesTasks } from '../context/GradesTasksContext';
@@ -413,7 +413,7 @@ const Profile: React.FC<Props> = ({ navigation }) => {
   const hasPhoto = Boolean(profile.avatarUri);
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
           <BackButton onPress={() => navigation.goBack()} />

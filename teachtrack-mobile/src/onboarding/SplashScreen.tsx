@@ -52,7 +52,7 @@ const SplashScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
-      <StatusBar barStyle="light-content" backgroundColor={BG} />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <View style={styles.inner}>
         <Image
           source={require('../../assets/images/logo-transparent.png')}

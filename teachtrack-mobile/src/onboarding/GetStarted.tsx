@@ -10,13 +10,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
-import { fonts as F, useThemeMode } from '../theme';
+import { fonts as F, useLayout, useThemeMode } from '../theme';
 import { PulseScrollView } from '../components/PulseScrollView';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'GetStarted'>;
 
 const GetStarted: React.FC<Props> = ({ navigation }) => {
   const { ink, theme } = useThemeMode();
+  const layout = useLayout();
 
   const styles = useMemo(
     () =>
@@ -27,7 +28,7 @@ const GetStarted: React.FC<Props> = ({ navigation }) => {
         },
         scrollInner: {
           flexGrow: 1,
-          paddingHorizontal: 28,
+          paddingHorizontal: layout.authGutter,
           paddingTop: 12,
           paddingBottom: Platform.OS === 'ios' ? 28 : 20,
           justifyContent: 'center',
@@ -35,17 +36,17 @@ const GetStarted: React.FC<Props> = ({ navigation }) => {
         },
         hero: {
           width: '100%',
-          maxWidth: 360,
+          maxWidth: layout.contentMax,
           alignItems: 'center',
         },
         logoWrap: {
           alignItems: 'center',
           justifyContent: 'center',
-          marginBottom: 28,
+          marginBottom: layout.short ? 16 : 28,
         },
         logo: {
-          width: 200,
-          height: 176,
+          width: layout.compact ? 160 : 200,
+          height: layout.compact ? 140 : 176,
           maxWidth: '72%',
         },
         eyebrow: {
@@ -58,8 +59,8 @@ const GetStarted: React.FC<Props> = ({ navigation }) => {
           marginBottom: 10,
         },
         title: {
-          fontSize: 40,
-          lineHeight: 44,
+          fontSize: layout.fs(40),
+          lineHeight: layout.fs(44),
           fontFamily: F.outfitBlack,
           letterSpacing: -1.2,
           textAlign: 'center',
@@ -72,12 +73,12 @@ const GetStarted: React.FC<Props> = ({ navigation }) => {
           color: theme.brandLogoPurple,
         },
         lede: {
-          fontSize: 16,
-          lineHeight: 24,
+          fontSize: layout.fs(16),
+          lineHeight: layout.fs(24),
           fontFamily: F.dmRegular,
           color: ink.inkSoft,
           textAlign: 'center',
-          maxWidth: 300,
+          maxWidth: Math.min(300, layout.width - layout.authGutter * 2),
         },
         divider: {
           width: 48,
@@ -125,7 +126,7 @@ const GetStarted: React.FC<Props> = ({ navigation }) => {
           fontFamily: F.outfitBold,
         },
       }),
-    [ink, theme],
+    [ink, theme, layout],
   );
 
   return (

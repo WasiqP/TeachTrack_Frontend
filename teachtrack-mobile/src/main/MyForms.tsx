@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Modal, TouchableWithoutFeedback, Dimensions, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Animated, Modal, TouchableWithoutFeedback, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { TAB_SAFE_EDGES } from '../theme';
 import { NativeStackScreenProps, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import BottomTab from '../components/BottomTab';
@@ -14,7 +15,6 @@ import EditIcon from '../../assets/images/edit.svg';
 import BackButton from '../components/Reusable-Components/BackButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MyForms'>;
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // Animated Trash Icon Component
 const AnimatedTrashIcon = ({ size = 24, scaleValue }: { size?: number; scaleValue: any }) => {
@@ -246,7 +246,7 @@ const MyForms: React.FC<Props> = ({ navigation, route }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={TAB_SAFE_EDGES}>
       {/* Header Section - Behind forms */}
       <View style={[styles.header, styles.headerBehind]}>
         <View style={styles.headerTop}>

@@ -1,97 +1,147 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# TeachTrack API
 
-# Getting Started
+REST API for the TeachTrack teacher app and public student forms.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+- **Base URL (local):** `http://localhost:3000`
+- **API prefix:** `/api/v1`
+- **Auth:** `Authorization: Bearer <accessToken>` on every teacher route
+- **Public:** `/api/v1/public/forms/:formId` and `GET /form/:formId` (no token)
 
-## Step 1: Start Metro
+The older Python FastAPI files under `app/` are unused scaffolding. **This Node API is v1.**
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## Stack
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+Node.js 20+ · TypeScript · Express · Prisma · PostgreSQL · Zod · JWT (15m access + 30d refresh) · bcrypt
 
-```sh
-# Using npm
-npm start
+## Setup
 
-# OR using Yarn
-yarn start
+1. Install Node 20+ and PostgreSQL 15+.
+2. Create a database:
+
+```sql
+CREATE DATABASE teachtrack;
 ```
 
-## Step 2: Build and run your app
+3. Copy env and edit `DATABASE_URL` / JWT secrets:
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```bash
+cp .env.example .env
 ```
 
-### iOS
+4. Install, migrate, run:
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```bash
+npm install
+npx prisma generate
+npx prisma migrate deploy
+npm run dev
 ```
 
-Then, and every time you update your native dependencies, run:
+Health check: `GET http://localhost:3000/health` → `{ "ok": true }`
 
-```sh
-bundle exec pod install
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `npm run dev` | Watch mode |
+| `npm run build` / `npm start` | Production |
+| `npm run prisma:migrate` | Dev migrations |
+| `npm run prisma:generate` | Prisma client |
+| `npm run smoke` | Hits `/health` + register (OTP from server log) |
+
+### Email / OTP
+
+If `SMTP_HOST` is empty, **development logs the 6-digit OTP to the console**. Codes are random, hashed, expire (`OTP_EXPIRES_MINUTES`, default 10), and cannot be reused. Production requires SMTP.
+
+## Product rules (frontend should match)
+
+- Signup does **not** return tokens until OTP verify (`purpose: "signup"`).
+- Reset OTP returns a short-lived `resetToken`, not a session. Then `POST /auth/reset-password`.
+- Teacher A cannot read teacher B’s classes, forms, or grades (all queries filter `teacherId`).
+- Deleting a **class** cascades students, attendance, announcements, activity, tasks, and grades for that class.
+- Deleting a **student** deletes that student’s grade rows and attendance entries.
+- Deleting a **form** deletes ClassTasks with that `formId` and their grades.
+- New roster students automatically get **pending** grade rows for existing class tasks.
+- Attendance `dateKey` is **`YYYY-MM-DD` as sent by the client** (treat as the teacher’s device-local calendar date, not converted to UTC midnight). `takenAt` is server ISO UTC.
+- Public form JSON never includes `correctAnswers`, roster, or `teacherRemark` / `followUp`.
+- After a student submit, matching grade rows stay **`pending`** until the teacher marks them.
+- Share URL: `{STUDENT_FORM_BASE_URL}/{formId}` (local default `http://localhost:3000/form/<uuid>`). Also returned as `shareUrl` on form resources.
+- Empty accounts are expected (no demo seed).
+- Task/grade IDs are **server UUIDs**, not `form-{formId}-cls-{classId}`.
+
+## Response shape
+
+Success:
+
+```json
+{ "success": true, "data": { } }
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+Error:
 
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
+```json
+{
+  "success": false,
+  "error": { "code": "INVALID_OTP", "message": "That code is wrong or expired." }
+}
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+| HTTP | Codes |
+|------|--------|
+| 400 | `VALIDATION_ERROR`, `INVALID_OTP` |
+| 401 | `UNAUTHORIZED`, `INVALID_CREDENTIALS`, `EMAIL_NOT_VERIFIED` |
+| 403 | `FORBIDDEN` |
+| 404 | `NOT_FOUND` |
+| 409 | `EMAIL_TAKEN`, `CONFLICT` |
+| 429 | `RATE_LIMITED` |
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+Rate limits: auth/OTP 10 per 15 min per IP; OTP resend 1 per 50s per email+purpose; public submit 30 per 15 min per IP.
 
-## Step 3: Modify your app
+## Curl walkthrough
 
-Now that you have successfully run the app, let's make changes!
+```bash
+# health
+curl -s http://localhost:3000/health
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+# register
+curl -s -X POST http://localhost:3000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Ada","email":"ada@example.com","password":"Password123!"}'
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+# read OTP from the server log, then:
+curl -s -X POST http://localhost:3000/api/v1/auth/otp/verify \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ada@example.com","code":"123456","purpose":"signup"}'
+```
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+Use `data.tokens.accessToken` as `TOKEN`:
 
-## Congratulations! :tada:
+```bash
+# create class
+curl -s -X POST http://localhost:3000/api/v1/classes \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"Mathematics 101","subject":"Mathematics","gradeLevel":"Grade 10","schedule":"Mon 9am","students":[{"name":"Alex Morgan","email":"alex@school.edu","rollNumber":"12"}]}'
 
-You've successfully run and modified your React Native App. :partying_face:
+# create form
+curl -s -X POST http://localhost:3000/api/v1/forms \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"Midterm quiz","iconId":"clipboard","answers":{"taskKind":"quiz","questions":[{"id":"q1","title":"2+2?","type":"shortText","required":true}]}}'
 
-### Now what?
+# assign (replace CLASS_ID and FORM_ID)
+curl -s -X POST http://localhost:3000/api/v1/forms/FORM_ID/assign \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"title":"Midterm quiz","kind":"quiz","dueLabel":"Due today","targets":[{"classId":"CLASS_ID"}]}'
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+# public form
+curl -s http://localhost:3000/api/v1/public/forms/FORM_ID
+```
 
-# Troubleshooting
+## Frontend contract
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+See **[FRONTEND_API.md](./FRONTEND_API.md)** for every endpoint, payload, and screen mapping.
 
-# Learn More
+## Production
 
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- Set `NODE_ENV=production`, strong JWT secrets, real `DATABASE_URL`, SMTP, `APP_PUBLIC_URL`, `STUDENT_FORM_BASE_URL`.
+- Terminate **HTTPS** at the reverse proxy / load balancer and set `CORS_ORIGINS` to the app origins.
+- `GET /docs` is not included in v1 (optional later).

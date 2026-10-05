@@ -14,7 +14,7 @@ import BottomTab from '../components/BottomTab';
 import Svg, { Path } from 'react-native-svg';
 import { useClasses, type ClassData } from '../context/ClassesContext';
 import { usePulseAlert } from '../context/AlertModalContext';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, TAB_SAFE_EDGES, useLayout, useThemeMode } from '../theme';
 import { PulseScrollView } from '../components/PulseScrollView';
 import TabScreenHeaderBar from '../components/TabScreenHeaderBar';
 
@@ -173,6 +173,7 @@ const TrashIcon = ({ size = 18, color = '#DC2626' }: { size?: number; color?: st
 
 const MyClasses: React.FC<Props> = ({ navigation, embedded }) => {
   const { ink, theme } = useThemeMode();
+  const layout = useLayout();
   const { classes, deleteClass } = useClasses();
   const { showAlert } = usePulseAlert();
   const [searchQuery, setSearchQuery] = useState('');
@@ -244,7 +245,7 @@ const MyClasses: React.FC<Props> = ({ navigation, embedded }) => {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingHorizontal: layout.gutter,
     paddingTop: 4,
     paddingBottom: 108,
   },
@@ -529,10 +530,10 @@ const MyClasses: React.FC<Props> = ({ navigation, embedded }) => {
     maxWidth: 300,
   },
       }),
-    [ink, theme],
+    [ink, theme, layout],
   );
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={TAB_SAFE_EDGES}>
       <TabScreenHeaderBar navigation={navigation}>
         <View>
           <Text style={styles.title}>My Classes</Text>

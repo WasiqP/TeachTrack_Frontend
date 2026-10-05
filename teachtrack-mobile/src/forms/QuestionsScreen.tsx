@@ -9,7 +9,6 @@ import {
   Animated,
   Modal,
   TouchableWithoutFeedback,
-  Dimensions
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
@@ -19,6 +18,8 @@ import { useForms } from '../context/FormsContext';
 import { usePulseAlert } from '../context/AlertModalContext';
 import { PulseScrollView } from '../components/PulseScrollView';
 import BackButton from '../components/Reusable-Components/BackButton';
+import { api } from '../api/client';
+import { launchImageLibrary } from 'react-native-image-picker';
 import ImageIcon from '../../assets/images/image.svg';
 import RazerAudioIcon from '../../assets/images/razer-audio.svg';
 import ShortTextIcon from '../../assets/images/short-text.svg';
@@ -32,8 +33,6 @@ import NumberIcon from '../../assets/images/number.svg';
 import EmailIcon from '../../assets/images/email.svg';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'QuestionsScreen'>;
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export type QuestionType = 
   | 'shortText' 
@@ -188,6 +187,38 @@ const QuestionsScreen: React.FC<Props> = ({ route, navigation }) => {
       });
 
       navigation.goBack();
+    }
+  };
+
+  const handlePickQuestionImage = async () => {
+    const picked = await launchImageLibrary({
+      mediaType: 'photo',
+      selectionLimit: 1,
+    });
+    if (picked.didCancel || !picked.assets?.[0]?.uri) return;
+    const asset = picked.assets[0];
+    const uri = asset.uri as string;
+    const name = asset.fileName || uri.split('/').pop() || 'question.jpg';
+    const type = asset.type || (name.endsWith('.png') ? 'image/png' : 'image/jpeg');
+    const formData = new FormData();
+    formData.append('file', { uri, name, type } as unknown as Blob);
+    try {
+      const uploaded = await api.upload<{ url?: string }>('/uploads/question-media', formData);
+      if (uploaded?.url) {
+        setQuestionData(prev => ({ ...prev, imageUrl: uploaded.url }));
+      } else {
+        showAlert({
+          variant: 'error',
+          title: 'Upload failed',
+          message: 'The API did not return a media URL.',
+        });
+      }
+    } catch (err) {
+      showAlert({
+        variant: 'error',
+        title: 'Couldn’t upload image',
+        message: err instanceof Error ? err.message : 'Check that FastAPI is running on port 8000.',
+      });
     }
   };
 
@@ -1058,13 +1089,7 @@ const QuestionsScreen: React.FC<Props> = ({ route, navigation }) => {
           {/* Image Upload */}
           <Pressable 
             style={styles.mediaBtn}
-            onPress={() =>
-              showAlert({
-                variant: 'info',
-                title: 'Image Upload',
-                message: 'Image upload functionality coming soon.',
-              })
-            }
+            onPress={() => void handlePickQuestionImage()}
             android_ripple={{ color: 'rgba(0,0,0,0.06)' }}
           >
             <ImageIcon width={28} height={28} stroke="#000000" />

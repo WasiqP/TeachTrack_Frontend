@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useLayout, useThemeMode } from '../theme';
 
 interface Props {
   Illustration: React.ComponentType<any>;
@@ -14,8 +14,6 @@ interface Props {
   onSkip?: () => void;
 }
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
-
 const OnboardingCard: React.FC<Props> = ({
   Illustration,
   title,
@@ -27,22 +25,24 @@ const OnboardingCard: React.FC<Props> = ({
   onSkip,
 }) => {
   const { ink, theme } = useThemeMode();
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const layout = useLayout();
   const { illusWidth, illusHeight } = useMemo(() => {
     const aspect = 1024 / 768;
     const maxZoneHeight = SCREEN_HEIGHT * 0.55 - 60;
-    const maxZoneWidth = SCREEN_WIDTH - 56;
+    const maxZoneWidth = SCREEN_WIDTH - layout.authGutter * 2;
     let w = Math.min(maxZoneWidth, 420);
     let h = w / aspect;
     if (h > maxZoneHeight) {
       h = maxZoneHeight;
       w = h * aspect;
     }
-    if (w < 220) {
-      w = 220;
+    if (w < Math.min(220, maxZoneWidth)) {
+      w = Math.min(220, maxZoneWidth);
       h = w / aspect;
     }
     return { illusWidth: Math.round(w), illusHeight: Math.round(h) };
-  }, []);
+  }, [SCREEN_HEIGHT, SCREEN_WIDTH, layout.authGutter]);
 
   const styles = useMemo(
     () =>
@@ -50,9 +50,9 @@ const OnboardingCard: React.FC<Props> = ({
         screen: {
           flex: 1,
           backgroundColor: ink.canvas,
-          paddingHorizontal: 28,
-          paddingTop: 40,
-          paddingBottom: 32,
+          paddingHorizontal: layout.authGutter,
+          paddingTop: layout.short ? 16 : 40,
+          paddingBottom: layout.short ? 16 : 32,
         },
         illustrationZone: {
           flex: 0.55,
@@ -64,8 +64,8 @@ const OnboardingCard: React.FC<Props> = ({
           alignItems: 'center',
         },
         title: {
-          fontSize: 26,
-          lineHeight: 32,
+          fontSize: layout.fs(26),
+          lineHeight: layout.fs(32),
           fontFamily: F.outfitExtraBold,
           color: ink.ink,
           textAlign: 'center',
@@ -127,11 +127,11 @@ const OnboardingCard: React.FC<Props> = ({
           fontFamily: F.outfitBold,
         },
       }),
-    [ink, theme],
+    [ink, theme, layout],
   );
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <View style={styles.illustrationZone}>
         <Illustration width={illusWidth} height={illusHeight} />
       </View>

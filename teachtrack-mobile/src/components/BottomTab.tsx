@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
-import { useThemeMode } from '../theme';
+import { useLayout, useThemeMode } from '../theme';
 
 /** Space between icons and the top of the system nav / home indicator zone */
 const TAB_CONTENT_BOTTOM = 12;
@@ -116,6 +116,7 @@ const BottomTab: React.FC<BottomTabProps> = ({
 }) => {
   const { ink, theme } = useThemeMode();
   const insets = useSafeAreaInsets();
+  const { compact, short } = useLayout();
   const paddingBottom = useSafeArea ? TAB_CONTENT_BOTTOM + insets.bottom : 16;
 
   const styles = useMemo(
@@ -124,21 +125,25 @@ const BottomTab: React.FC<BottomTabProps> = ({
         bottomNav: {
           flexDirection: 'row',
           backgroundColor: ink.canvas,
-          paddingHorizontal: 20,
-          paddingTop: 20,
+          paddingLeft: 8 + insets.left,
+          paddingRight: 8 + insets.right,
+          paddingTop: short ? 12 : 20,
           borderTopWidth: ink.borderWidth,
           borderTopColor: ink.borderInk,
           justifyContent: 'space-around',
           alignItems: 'center',
         },
         navItem: {
+          flex: 1,
           alignItems: 'center',
-          paddingVertical: 8,
-          paddingHorizontal: 12,
+          justifyContent: 'center',
+          minHeight: 48,
+          paddingVertical: compact ? 6 : 8,
+          paddingHorizontal: compact ? 4 : 8,
           borderRadius: 12,
         },
       }),
-    [ink],
+    [ink, insets.left, insets.right, compact, short],
   );
 
   const handleNavigate = (routeName: string) => {

@@ -14,6 +14,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { STACK_SAFE_EDGES } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import {
@@ -410,7 +411,7 @@ const CreateClass: React.FC<Props> = ({ navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
           <BackButton onPress={() => navigation.goBack()} />

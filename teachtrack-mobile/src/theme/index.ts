@@ -2,6 +2,8 @@ import { theme as staticTheme } from './Colors';
 export * from './Colors';
 export * from './typography';
 export * from './palettes';
+export * from './layout';
+export { useLayout } from './useLayout';
 export { ui } from './uiStyles';
 
 /** @deprecated Prefer `useThemeMode().theme` for runtime appearance */

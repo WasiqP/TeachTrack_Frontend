@@ -22,7 +22,7 @@ import {
   type ClassStudentRecord,
 } from '../context/ClassesContext';
 import { useGradesTasks, type TaskGradeRecord, type TaskKind } from '../context/GradesTasksContext';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import { PulseScrollView } from '../components/PulseScrollView';
 import { usePulseAlert } from '../context/AlertModalContext';
@@ -568,7 +568,7 @@ const StudentRecordsScreen: React.FC<Props> = ({ route, navigation }) => {
 
   if (!classData || !student) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
         <View style={styles.header}>
           <BackButton onPress={() => navigation.goBack()} />
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -589,7 +589,7 @@ const StudentRecordsScreen: React.FC<Props> = ({ route, navigation }) => {
     : null;
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle} numberOfLines={1}>

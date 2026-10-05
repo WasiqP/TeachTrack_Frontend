@@ -5,7 +5,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../types/navigation';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useThemeMode } from '../theme';
 import { useForms } from '../context/FormsContext';
 import ShareIcon from '../../assets/images/share.svg';
 import EditPurpleIcon from '../../assets/images/edit-purple.svg';
@@ -385,7 +385,7 @@ const EditForm: React.FC<Props> = ({ route, navigation }) => {
 
   if (!form) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={STACK_SAFE_EDGES}>
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyTitle}>Task not found</Text>
           <Text style={styles.emptyBody}>It may have been removed. Go back and open it from My tasks.</Text>
@@ -422,7 +422,7 @@ const EditForm: React.FC<Props> = ({ route, navigation }) => {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={STACK_SAFE_EDGES}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}

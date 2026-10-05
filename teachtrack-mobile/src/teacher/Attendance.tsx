@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { STACK_SAFE_EDGES } from '../theme';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
 import BackButton from '../components/Reusable-Components/BackButton';
@@ -322,7 +323,7 @@ const Attendance: React.FC<Props> = ({ route, navigation }) => {
 
   if (!activeClassId) {
     return (
-      <SafeAreaView style={styles.screen} edges={['top']}>
+      <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
         <View style={styles.header}>
           <BackButton onPress={() => navigation.goBack()} />
           <View style={styles.headerText}>
@@ -386,7 +387,7 @@ const Attendance: React.FC<Props> = ({ route, navigation }) => {
   }
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <PulseScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollPageContent, { paddingBottom: 108 + insets.bottom }]}

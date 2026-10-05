@@ -12,20 +12,24 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation';
-import { fonts as F, radius, useThemeMode } from '../theme';
+import { fonts as F, radius, STACK_SAFE_EDGES, useLayout, useThemeMode } from '../theme';
 import BackButton from '../components/Reusable-Components/BackButton';
 import { usePulseAlert } from '../context/AlertModalContext';
 import { PulseScrollView } from '../components/PulseScrollView';
+import { useAuth } from '../context/AuthContext';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SignUp'>;
 
 const SignUp: React.FC<Props> = ({ navigation }) => {
   const { ink, theme } = useThemeMode();
+  const layout = useLayout();
   const { showAlert } = usePulseAlert();
+  const { register } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const handleBack = () => {
     if (navigation.canGoBack()) {
@@ -48,10 +52,10 @@ const SignUp: React.FC<Props> = ({ navigation }) => {
           marginBottom: 2,
         },
         scrollContent: {
-          paddingHorizontal: 28,
+          paddingHorizontal: layout.authGutter,
           paddingTop: 0,
           paddingBottom: 18,
-          maxWidth: 480,
+          maxWidth: layout.contentMax,
           width: '100%',
           alignSelf: 'center',
         },
@@ -166,11 +170,11 @@ const SignUp: React.FC<Props> = ({ navigation }) => {
           fontFamily: F.outfitBold,
         },
       }),
-    [ink, theme],
+    [ink, theme, layout],
   );
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -232,9 +236,10 @@ const SignUp: React.FC<Props> = ({ navigation }) => {
             />
 
             <Pressable
-              style={styles.primaryBtn}
+              style={[styles.primaryBtn, busy && { opacity: 0.55 }]}
               android_ripple={{ color: theme.rippleLight }}
-              onPress={() => {
+              disabled={busy}
+              onPress={async () => {
                 if (!name.trim() || !email.trim()) {
                   showAlert({
                     variant: 'warning',
@@ -251,14 +256,26 @@ const SignUp: React.FC<Props> = ({ navigation }) => {
                   });
                   return;
                 }
-                navigation.replace('VerifyOtp', {
-                  email: email.trim(),
-                  purpose: 'signup',
-                  name: name.trim(),
-                });
+                setBusy(true);
+                try {
+                  await register(name.trim(), email.trim(), password);
+                  navigation.replace('VerifyOtp', {
+                    email: email.trim(),
+                    purpose: 'signup',
+                    name: name.trim(),
+                  });
+                } catch (err) {
+                  showAlert({
+                    variant: 'error',
+                    title: 'Couldn’t create account',
+                    message: err instanceof Error ? err.message : 'Try again in a moment.',
+                  });
+                } finally {
+                  setBusy(false);
+                }
               }}
             >
-              <Text style={styles.primaryLabel}>Sign Up</Text>
+              <Text style={styles.primaryLabel}>{busy ? 'Creating account…' : 'Sign Up'}</Text>
             </Pressable>
 
             <Text style={styles.socialHint}>Sign up with socials</Text>

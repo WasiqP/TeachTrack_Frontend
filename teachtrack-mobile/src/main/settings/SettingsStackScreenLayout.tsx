@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { fonts as F, useThemeMode } from '../../theme';
+import { fonts as F, STACK_SAFE_EDGES, useLayout, useThemeMode } from '../../theme';
 import BackButton from '../../components/Reusable-Components/BackButton';
 import { PulseScrollView } from '../../components/PulseScrollView';
 
@@ -24,6 +24,7 @@ const SettingsStackScreenLayout: React.FC<Props> = ({
   contentBottomPadding = 32,
 }) => {
   const { ink } = useThemeMode();
+  const layout = useLayout();
 
   const styles = useMemo(
     () =>
@@ -50,16 +51,19 @@ const SettingsStackScreenLayout: React.FC<Props> = ({
         },
         scroll: { flex: 1 },
         scrollInner: {
-          paddingHorizontal: 24,
+          paddingHorizontal: layout.gutter + 4,
           paddingTop: 20,
           paddingBottom: contentBottomPadding,
+          maxWidth: layout.contentMax + layout.gutter * 2,
+          width: '100%',
+          alignSelf: 'center',
         },
       }),
-    [ink, contentBottomPadding],
+    [ink, contentBottomPadding, layout],
   );
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top']}>
+    <SafeAreaView style={styles.screen} edges={STACK_SAFE_EDGES}>
       <View style={styles.header}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={styles.headerTitle} numberOfLines={1}>
