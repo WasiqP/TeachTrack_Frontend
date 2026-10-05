@@ -1,1 +1,0 @@
-"""GrooveTeach / TeachClip API backend."""
